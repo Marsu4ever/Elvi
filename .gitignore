@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Whisper models (voice to text)
+src-tauri/models
+
+# Avatar JPGS
+Avatars/
+
+# Files
+CodeFlow
+Avatar prompts
+Elvi Star
+Control Mac Applications
+Notes
+Prompting
+WhisperModels
+
+# Environment variables (keep secrets safe!)
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/

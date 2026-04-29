@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",                 // modern JS output
+    "module": "ESNext",                 // for Vite/Tauri
+    "moduleResolution": "node",         // find node_modules packages
+    "esModuleInterop": true,            // allow default imports
+    "strict": true,                      // enable strict TS checks
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true                // skip type checks in node_modules
+  },
+  "include": ["src"]
+}
