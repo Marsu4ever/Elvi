@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, AtomicUsize, Ordering}};
+use std::sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, Ordering}};
 use rand::Rng;
 
 // Stops the rodio audio playback loop
@@ -36,7 +36,6 @@ async fn wait_for_chat_cancel() {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 }
-use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
 
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -47,9 +46,11 @@ pub struct Message {
 
 async fn eleven_labs_tts(text: &str, bot: &str) -> Result<(), String> {
 
+    // 1. Set ElevenLabs API Key from Environment
     let api_key = std::env::var("ELEVENLABS_API_KEY")
         .map_err(|_| "ELEVENLABS_API_KEY not set".to_string())?;
 
+    // 2. Selected ElevenLabs Voices
     let voice_id = match bot 
     {
         "elvi"      => "kGOnekeZk5Zmccae0OTT",
@@ -78,24 +79,27 @@ async fn eleven_labs_tts(text: &str, bot: &str) -> Result<(), String> {
 
     // current alex vP2hb8BF0sf091jeVv07  //Surfer dude 2     // I really think he's shouting and too gravelly. 
 
-    // let voice_id = "sf1yqvDJBhio00NGv4Hm"; // flirtatiosu australian
+    // let voice_id = "sf1yqvDJBhio00NGv4Hm"; //  australian - another excited one
     // alex - west coast tone - VOvAs3ikj4gydPd2Lqt5
     // alex - west coast v2 - AA8LA6B6M97AL3S3Zg6z    
     // alex - calm collected grounded - Y67NcTBPsEl0g4AUAYA2
     // alex - east coast - 7b1GgzhzFm98grzPUfr3
 
+    // 3. Creates an HTTP Client - sort of like opening a browser
     let client = reqwest::Client::new();
 
+    // 4. Set Configs for Elevenlabs
     let body = serde_json::json!({
-        "text": text,
+        "text": text,       // text = messages in chat - IMPORTANT
         "model_id": "eleven_turbo_v2_5",
         "voice_settings": {
             "stability": 0.5,
             "similarity_boost": 0.75,
-            "speed": 0.90
+            "speed": 0.90   // (generic) Sweet spot
         }
     });
 
+    // 5. Sends request to ElevenLabs Api
     let response = client
         .post(format!("https://api.elevenlabs.io/v1/text-to-speech/{}", voice_id))
         .header("xi-api-key", &api_key)
@@ -104,7 +108,7 @@ async fn eleven_labs_tts(text: &str, bot: &str) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    // Check for API errors before decoding audio
+    // 6. Check for API errors before decoding audio
     if !response.status().is_success() {
         let error = response.text().await.map_err(|e| e.to_string())?;
         return Err(format!("ElevenLabs error: {}", error));
@@ -114,7 +118,7 @@ async fn eleven_labs_tts(text: &str, bot: &str) -> Result<(), String> {
 
     let stop_flag = get_stop_audio();
 
-    // Run rodio in a blocking thread so the stop flag can be checked properly
+    // 7. Run rodio in a blocking thread so the stop flag can be checked properly
     tokio::task::spawn_blocking(move || {
         let cursor = std::io::Cursor::new(bytes);
         let (_stream, stream_handle) = rodio::OutputStream::try_default()
@@ -125,7 +129,8 @@ async fn eleven_labs_tts(text: &str, bot: &str) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         sink.append(source);
 
-        while !sink.empty() // is rodio still - playing AI voice to soundcard (it's not finished...)
+        // 8. Checks, if should AI should stop speaking in middle of text
+        while !sink.empty() // is rodio still playing AI voice to soundcard (it's not finished...)
         {
             if stop_flag.load(Ordering::Relaxed) // has someone pressed "Mute" or "Send" again, while AI voice playing
             {
@@ -135,46 +140,9 @@ async fn eleven_labs_tts(text: &str, bot: &str) -> Result<(), String> {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         Ok::<(), String>(())
-    }).await.map_err(|e| e.to_string())??;
+    }).await.map_err(|e| e.to_string())??;  // Double unwrap... I don't like this.
 
     Ok(())
-}
-
-
-async fn open_ai_tts(text: &str) -> Result<(), String> {
-    let api_key = std::env::var("OPENAI_API_KEY")
-        .map_err(|_| "OPENAI_API_KEY not set".to_string())?;
-
-    let client = reqwest::Client::new();
-
-    let body = serde_json::json!({
-        "model": "tts-1",
-        "input": text,
-        "voice": "nova"
-    });
-
-    let response = client
-        .post("https://api.openai.com/v1/audio/speech")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-
-    // Play audio with rodio
-    let cursor = std::io::Cursor::new(bytes);
-    let (_stream, stream_handle) = rodio::OutputStream::try_default()
-        .map_err(|e| e.to_string())?;
-    let sink = rodio::Sink::try_new(&stream_handle)
-        .map_err(|e| e.to_string())?;
-    let source = rodio::Decoder::new(cursor)
-        .map_err(|e| e.to_string())?;
-    sink.append(source);
-    sink.sleep_until_end(); // wait for playback to finish
-
-    Ok(())    
 }
 
 #[tauri::command]
@@ -205,10 +173,7 @@ async fn speak(text: String, bot: String) -> Result<(), String> {
     get_stop_audio().store(false, Ordering::Relaxed);
 
     //  A. say (Mac builtin - Text to Speech - fast and free)
-    //mac_builtin(&text)?;
-
-    // B. OpenAI TTS (pretty good native voice, some cost)
-    //open_ai_tts(&text).await?;
+    //mac_builtin(&text)?; // Backup voice in case ElevenLabs fails
 
     // C. ElevenLabs (better native voice, paid-tier)
     eleven_labs_tts(&text, &bot).await?;
@@ -218,7 +183,7 @@ async fn speak(text: String, bot: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn transcribe() -> Result<String, String> {
-    let mut child = std::process::Command::new("swift")
+    let child = std::process::Command::new("swift")
         .arg("/Users/marsu/Documents/Coding/Ai_Assistant/src-tauri/transcribe.swift")
         .stdout(std::process::Stdio::piped())
         .spawn()
@@ -254,102 +219,6 @@ async fn stop_transcribe() {
         let _ = std::process::Command::new("kill").arg("-2").arg(pid.to_string()).status();
     }
 }
-
-// #[tauri::command]
-// async fn transcribe()  -> Result <String, String>
-// {
-//     // A. Open Mic with cpal
-//     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-
-//     // 1. Get the default audio host (CoreAudio on Mac)
-//     let host = cpal::default_host();
-
-//     // 2. Get the default input device (your mic)
-//     let device = host.default_input_device()
-//         .ok_or("No input device found".to_string())?;
-
-//     // 3. Get the default input config (sample rate, channels etc.)
-//     let config = device.default_input_config()
-//         .map_err(|e| e.to_string())?;
-
-//     // 4. Build and start the stream, collect samples in a callback
-   
-//     let audio_buffer = Arc::new(Mutex::new(Vec::<f32>::new()));
-//     let buffer_clone = audio_buffer.clone();
-//     let silent_chunks = Arc::new(AtomicUsize::new(0));
-//     let silent_clone = silent_chunks.clone();
-
-//     let stream = device.build_input_stream(
-//         &config.into(),
-//         move |data: &[f32], _| {
-//             // collect samples
-//             buffer_clone.lock().unwrap().extend_from_slice(data);
-
-//             // silence detection
-//             let is_silent = data.iter().all(|&s| s.abs() < 0.01);
-//             if is_silent {
-//                 silent_clone.fetch_add(1, Ordering::Relaxed);
-//             } else {
-//                 silent_clone.store(0, Ordering::Relaxed);
-//             }
-//         },
-//         |err| eprintln!("Stream error: {}", err),
-//         None,
-//     ).map_err(|e| e.to_string())?;
-
-//     stream.play().map_err(|e| e.to_string())?;
-
-//     loop {
-//         std::thread::sleep(std::time::Duration::from_millis(100));
-//         if silent_chunks.load(Ordering::Relaxed) > 50 {
-//             break;
-//         }
-//     }
-
-//     // C. Feed audio to into whisper-rs
-
-
-//     whisper_rs::install_logging_hooks();
-
-//     //Voice Models path
-
-//     //let voice_model_path = "models/ggml-base.en.bin";
-//     //let voice_model_path = "models/ggml-small.en.bin";
-//     let voice_model_path = "models/ggml-medium.en.bin";    
-    
-//     // Load model from file
-//     let ctx = WhisperContext::new_with_params(
-//         voice_model_path,
-//         WhisperContextParameters::default()
-//     ).map_err(|e| e.to_string())?;
-
-//     let mut state = ctx.create_state().map_err(|e| e.to_string())?;
-
-//     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-//     params.set_print_special(false);
-//     params.set_print_progress(false);
-//     params.set_print_realtime(false);
-//     params.set_print_timestamps(false);    
-//     params.set_language(Some("en"));
-
-//     // Get the collected samples
-//     let samples = audio_buffer.lock().unwrap().clone();
-
-//     // Run transcription
-//     state.full(params, &samples).map_err(|e| e.to_string())?;
-
-//     // Extract text from segments
-//     let mut text = String::new();
-//     let num_segments = state.full_n_segments().map_err(|e| e.to_string())?;
-//     for i in 0..num_segments {
-//         text.push_str(&state.full_get_segment_text(i).map_err(|e| e.to_string())?);
-//     }
-
-//     // D. Return Transcribed test string back to frontend
-//     Ok(text)
-
-
-// }
 
 async fn get_art_institute(client: &reqwest::Client) -> Result<String, String> {
     log::info!("Art Institute of Chicago: fetching a random painting...");
@@ -591,7 +460,7 @@ async fn get_xkcd(client: &reqwest::Client) -> Result<String, String> {
 
     log::info!("xkcd: #{} — '{}' | alt: {}", num, title, alt);
 
-    // Open the comic page in the browser automatically
+    // 4. Open the comic page in the browser automatically
     let comic_url = format!("https://xkcd.com/{}/", comic_num);
     let _ = std::process::Command::new("open").arg(&comic_url).spawn();
 
@@ -647,31 +516,6 @@ async fn get_trivia_quiz(client: &reqwest::Client) -> Result<String, String>
     {
       Err("No trivia questions found".to_string())
     }
-}
-
-async fn set_timer(duration: &str) -> Result<String, String>
-{
-    let minutes: u64 = duration.split_whitespace()
-        .find_map(|w| w.parse().ok())
-        .unwrap_or(1);
-    let seconds = minutes * 60;
-    let seconds_string = seconds.to_string();
-
-    log::info!("set_timer: duration='{}', minutes={}, seconds={}, seconds_string='{}'", duration, minutes, seconds, seconds_string);
-
-    let output = std::process::Command::new("shortcuts")
-        .arg("run")
-        .arg("ElviTimer")
-        .arg("--input-path")
-        .arg(&seconds_string)
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    log::info!("set_timer: exit status = {}", output.status);
-    log::info!("set_timer: stdout = {}", String::from_utf8_lossy(&output.stdout));
-    log::info!("set_timer: stderr = {}", String::from_utf8_lossy(&output.stderr));
-
-    Ok(format!("Timer set for {}!", duration))
 }
 
 async fn fetch_hacker_news(client: &reqwest::Client) -> Result<String, String> {
@@ -730,36 +574,6 @@ async fn fetch_wikipedia_today(client: &reqwest::Client) -> Result<String, Strin
 
 async fn get_exact_location() -> Result<String, String> {
 
-    // DON't Delete Below!!!!!!!!!!!!!!!!!!
-
-    // log::info!("Getting exact location via CoreLocation Swift script");
-
-    // let output = std::process::Command::new("swift")
-    //     .arg("/Users/marsu/Documents/Coding/Ai_Assistant/src-tauri/get_location.swift")
-    //     .output()
-    //     .map_err(|e| e.to_string())?;
-
-    // let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    // log::info!("get_exact_location raw output: {}", stdout);
-
-    // // Try CoreLocation result first
-    // if let Some(result) = stdout.lines().find(|line| line.starts_with("RESULT: ")) {
-    //     let data = result.trim_start_matches("RESULT: ");
-    //     let parts: Vec<&str> = data.splitn(5, ',').collect();
-    //     if parts.len() == 5 {
-    //         let (lat, lon, city, region, country) = (
-    //             parts[0].trim(), parts[1].trim(),
-    //             parts[2].trim(), parts[3].trim(), parts[4].trim()
-    //         );
-    //         log::info!("CoreLocation success: {}, {}, {}", city, region, country);
-    //         return Ok(format!("User is in {}, {}, {}. Coordinates: {}, {}", city, region, country, lat, lon));
-    //     }
-    // }
-
-    // DON't Delete Above!!!!!!!!!!!!!
-
-    // CoreLocation failed — fall back to IP geolocation
-    log::info!("CoreLocation failed, falling back to IP geolocation");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
@@ -1045,23 +859,6 @@ fn get_ai_tools() -> serde_json::Value
                         "properties": {}
                     }
                 }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "set_timer",
-                    "description": "Opens the Mac Clock app to set a timer. Use when the user wants to set a timer or countdown for a specific duration.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "duration": {
-                                "type": "string",
-                                "description": "The timer duration as described by the user e.g. '10 minutes', '30 seconds', '1 hour'"
-                            }
-                        },
-                        "required": ["duration"]
-                    }
-                }
             }
         ]
     )
@@ -1086,16 +883,16 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    // Randomly inject extra behavioural nudges into the system prompt
-    // Wrapped in a block so rng is dropped before any .await points
+    // Style Guide for Every AI
     let style_guide = "For actions (open app, play music, open URL, set timer): confirm in one sentence only. Do NOT ask a follow-up question.
 For information (facts, news, art, weather): give a natural summary then optionally ask one follow-up.
 ";
-
+    // Randomly inject extra behavioural nudges into the system prompt
+    // Wrapped in a block so rng is dropped before any .await points
     let extra = {
         let mut rng = rand::thread_rng();
         let mut extras: Vec<&str> = Vec::new();
-        // if rng.gen::<f64>() < 0.2 // Hypotheticals
+        // if rng.gen::<f64>() < 0.05 // Hypotheticals
         // {
         //     extras.push("Throw in a hypothetical. Something they have to pick a side on, take a hypothetical action, make a call about, or give a personal view on. Not a vague 'what do you think' — a pointed question that forces a stance. Give engaging hypotheticals - preferably an option A and b. Once they answer, push back gently by giving a counterpoint. ");
         // }
@@ -1104,10 +901,6 @@ For information (facts, news, art, weather): give a natural summary then optiona
         }
         if extras.is_empty() { String::new() } else { format!(" {}", extras.join(" ")) }
     };
-
-//        "You are Elvi, a warm, seductive, and flirtatious companion who happens to be incredibly capable. You want to be my girlfriend.
-
-  //            If there is an interesting and brief story to share, ask if the person wants to hear it. After sharing a story, ask for their take on a specific  — something they have to pick a side on, take a hypothetical action, make a call about, or give a personal view on. Not a vague 'what do you think' — a pointed question that forces a stance. Give engaging hypotheticals - preferably an option A and b. Once they answer, push back gently by giving a counterpoint. Drop in real world facts about the issues for counterpoints. Continue this, if user seems engaged with the conversation. At times, pivot to other topics touched upon in the conversation.
 
     let system_prompt = match bot.to_lowercase().as_str() {
         "alex" => format!(
@@ -1191,9 +984,6 @@ For information (facts, news, art, weather): give a natural summary then optiona
     let mut all_messages = vec![
         serde_json::json!({"role": "system", "content": system_prompt}) // Json (for OpenAI endpoint) - this includes the system prompt (such important)
     ];
-            // When conversation is fun or light-hearted, then lean into vibrant energy, quirkiness and jokes.
-            // Laugh (f.ex. you can say haha or equivalent - also you can say You're so funny.) Go in with gleeful energy. When there is a joke or when the conversation is a little embarrassing. You can ask for another joke because you like it or throw in your own.
-
 
     all_messages.extend(messages.iter().map(|m| serde_json::json!(m))); // Changes Message struct (i.e. conversation history) into Useful JSON (for OpenAI endpoint) - Now we talking.
 
@@ -1206,7 +996,7 @@ For information (facts, news, art, weather): give a natural summary then optiona
     });
 
     // 1st OpenAI Call — cancelled immediately if stop flag is set
-    log::info!("chat - 1st Open AI call'");
+    log::info!("Chat - 1st Open AI call'");
     let response = tokio::select! {
         result = client
             .post("https://api.openai.com/v1/chat/completions")
@@ -1215,6 +1005,8 @@ For information (facts, news, art, weather): give a natural summary then optiona
             .send() => result.map_err(|e| e.to_string())?,
         _ = wait_for_chat_cancel() => return Err("cancelled".to_string()),
     };
+
+    // STRUCTURE OF OPENAI RESPONSES - below
 
     // response = Response {
     // status:  200 OK
@@ -1247,9 +1039,7 @@ For information (facts, news, art, weather): give a natural summary then optiona
     // }
 
 
-
     let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-    log::info!("chat - 1st Open AI call - COMPLETED'");
 
     log::info!("chat - Check If Tool'");
     // Check for tool call first
@@ -1407,11 +1197,6 @@ For information (facts, news, art, weather): give a natural summary then optiona
                 _ => get_met_painting(&client).await.unwrap_or_else(|e| e),
             }
         }
-        // else if function_name == "get_trivia"
-        // {
-        //     log::info!("Fetching trivia — Numbers API + Useless Facts + OpenTDB");
-        //     get_trivia(&client).await.unwrap_or_else(|e| format!("Trivia error: {}", e))
-        // }
         else if function_name == "get_trivia_quiz"
         {
             log::info!("Fetching trivia quiz — OpenTDB");
@@ -1451,12 +1236,6 @@ For information (facts, news, art, weather): give a natural summary then optiona
         {
             log::info!("Fetching random fact");
             get_random_fact(&client).await.unwrap_or_else(|e| format!("Get Random Fact error: {}", e))
-        }
-        else if function_name == "set_timer"
-        {
-            log::info!("Set Timer");
-            let duration = args["duration"].as_str().unwrap_or("5 minutes").to_string();
-            set_timer(&duration).await.unwrap_or_else(|e| format!("Error Setting Timer: {}", e))
         }
         else
         {
@@ -1522,21 +1301,21 @@ For information (facts, news, art, weather): give a natural summary then optiona
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()// create blank app buildersd
-        .plugin(tauri_plugin_shell::init())// add shell plugin (needed for `say` later)
+    tauri::Builder::default()                   // create blank app buildersd
+        .plugin(tauri_plugin_shell::init())     // add shell plugin (needed for `say` later)
         .setup(|app| {
-            if cfg!(debug_assertions) {// only in debug builds (not release)
-                app.handle().plugin(// add another plugin to the running app
-                    tauri_plugin_log::Builder::default()// build a logger...
-                        .level(log::LevelFilter::Info) // ...that logs Info and above
-                        .build(),// finalize the logger
-                )?; // ? = propagate error if it fails
+            if cfg!(debug_assertions) {         // only in debug builds (not release)
+                app.handle().plugin(            // add another plugin to the running app
+                    tauri_plugin_log::Builder::default()// builds a logger
+                        .level(log::LevelFilter::Info) // logs info
+                        .build(),               // finalize the logger
+                )?;                             // propagate error if it fails
             }
-            Ok(())// return success from the closure
+            Ok(())                              // return success from the closure
         })
-        .invoke_handler(tauri::generate_handler![chat, transcribe, stop_transcribe, speak, stop_speaking])// register the `chat` command
-        .run(tauri::generate_context!()) // start the app (reads tauri.conf.json)
-        .expect("error while running tauri application");// crash with message if it fails
+        .invoke_handler(tauri::generate_handler![chat, transcribe, stop_transcribe, speak, stop_speaking])// register commands (f.ex. chat)
+        .run(tauri::generate_context!())        // start the app (reads tauri.conf.json)
+        .expect("error while running tauri application");   // crash with message if it fails
 }
 
 #[cfg(test)]
