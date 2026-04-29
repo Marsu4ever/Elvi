@@ -21,7 +21,6 @@ A conversational AI for Mac with real personality and voice.
 🌐 Web search and webpage reading  
 🚀 NASA imagery and space exploration  
 🖼️ Art from the Met Museum and Art Institute of Chicago  
-⏱️ Timer setting via Mac Shortcuts  
 📰 Hacker News and Wikipedia daily events  
 
 ---
