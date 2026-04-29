@@ -1,2 +1,4 @@
 # Elvi
-A conversational AI chatbot that also can do tasks such as google search/play spotify tracks etc. Mac App.
+A conversational AI for Mac. Choose between personalities - each with their own voice powered by ElevenLabs.
+Chat naturally or do ask it do things for you: search the web, play Spotify, fetch news, explore art and space imagery, and more.
+Built with Tauri, Rust, and OpenAI.
