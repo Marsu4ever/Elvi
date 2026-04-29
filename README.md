@@ -1,7 +1,10 @@
 # Elvi
 A conversational AI for Mac.
 
-Choose between personalities - each with their own voice powered by ElevenLabs.
+Choose between Personalities - each with their own Voice powered by ElevenLabs.
+
+![Elvi landing screen](screenshots/landing_page.png)
+[▶ Watch it in action](your-video-link)
 
 Chat naturally or Ask it do things for you: search the web, play Spotify, fetch news, explore art and space imagery, and more.
 
