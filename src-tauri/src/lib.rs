@@ -1,30 +1,25 @@
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, Ordering}};
+use std::sync::{Arc, OnceLock, atomic::{AtomicBool, Ordering}};
 use rand::Rng;
 
-// Stops the rodio audio playback loop
-static STOP_AUDIO: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+mod transcribe;
+use transcribe::{transcribe, stop_transcribe};
+
+mod speak;
+use speak::{speak, stop_speaking};
+
+mod system_prompt;
+use system_prompt::{get_system_prompt};
+
+mod ai_tools;
+use ai_tools::{get_ai_tools};
+
 // Cancels in-flight OpenAI chat requests
 static STOP_CHAT: OnceLock<Arc<AtomicBool>> = OnceLock::new();
-// Ensures only one audio track plays at a time — new audio waits for old to fully stop
-static AUDIO_LOCK: OnceLock<Arc<tokio::sync::Mutex<()>>> = OnceLock::new();
-// Holds the PID of the running transcribe subprocess so it can be killed mid-recording
-static TRANSCRIBE_PID: OnceLock<Arc<Mutex<Option<u32>>>> = OnceLock::new();
 
-fn get_transcribe_pid() -> Arc<Mutex<Option<u32>>> {
-    TRANSCRIBE_PID.get_or_init(|| Arc::new(Mutex::new(None))).clone()
-}
-
-fn get_stop_audio() -> Arc<AtomicBool> {
-    STOP_AUDIO.get_or_init(|| Arc::new(AtomicBool::new(false))).clone()
-}
 
 fn get_stop_chat() -> Arc<AtomicBool> {
     STOP_CHAT.get_or_init(|| Arc::new(AtomicBool::new(false))).clone()
-}
-
-fn get_audio_lock() -> Arc<tokio::sync::Mutex<()>> {
-    AUDIO_LOCK.get_or_init(|| Arc::new(tokio::sync::Mutex::new(()))).clone()
 }
 
 // Resolves as soon as the chat stop flag is set — used with tokio::select! to cancel API requests
@@ -42,182 +37,6 @@ async fn wait_for_chat_cancel() {
 pub struct Message {
     pub role: String,
     pub content: String,
-}
-
-async fn eleven_labs_tts(text: &str, bot: &str) -> Result<(), String> {
-
-    // 1. Set ElevenLabs API Key from Environment
-    let api_key = std::env::var("ELEVENLABS_API_KEY")
-        .map_err(|_| "ELEVENLABS_API_KEY not set".to_string())?;
-
-    // 2. Selected ElevenLabs Voices
-    let voice_id = match bot 
-    {
-        "elvi"      => "kGOnekeZk5Zmccae0OTT",
-        "alex"      => "7b1GgzhzFm98grzPUfr3",
-        "samantha"  => "N3x7DJvE7NmN4ur3oV2R",
-        _           => "kGOnekeZk5Zmccae0OTT", // fallback elvi
-    };
-    // American Assistan - natural, upbeat, conversational female voice. Swap voice_id for a different voice.
-    // let voice_id = "kGOnekeZk5Zmccae0OTT"; // 1st voice - YES!
-
-    // let voice_id = "qtRMdFaItZ1F86uQRfTL"; // Elvi - American, upbeat - Too Loud
-    // let voice_id = "ASkZgqrwYoWrqNOZcH1k";  // Scarlett as a teacher
-    // let voice_id = "jqcCZkN6Knx8BJ5TBdYR";  // Zara - soft, youngish voice - YES!
-    // let voice_id = "56bWURjYFHyYyVf490Dp"; // Emma - Australian - Yes [OPTIONAL]
-    // let voice_id = "qSeXEcewz7tA0Q0qk9fH"; // Victoria  - strong, confident 
-    // let voice_id = "ZF6FPAbjXT4488VcRRnw"; // Amelia  - Bristish, reading - Yes [OPTIONAL]
-
-    // let voice_id = "1SM7GgM6IMuvQlz2BwM3"; // Mark 
-    // let voice_id = "NFG5qt843uXKj4pFvR7C"; // Adam Stone - maybe - friendly - low british - SO FAR BEST MALE
-    // let voice_id = "uju3wxzG5OhpWcoi3SMy"; // Michael C. Vincent 
-    // let voice_id = "Cz0K1kOv9tD8l0b5Qu53"; // Jon - ok
-    // let voice_id = "NNl6r8mD7vthiJatiJt1"; // Bradford - British - almost Jarvis/Butler
-    // let voice_id = "gUABw7pXQjhjt0kNFBTF"; // Andrew - authentic
-
-    // surfer dude BqlkZRsUU8HasnGNgyKD
-
-    // current alex vP2hb8BF0sf091jeVv07  //Surfer dude 2     // I really think he's shouting and too gravelly. 
-
-    // let voice_id = "sf1yqvDJBhio00NGv4Hm"; //  australian - another excited one
-    // alex - west coast tone - VOvAs3ikj4gydPd2Lqt5
-    // alex - west coast v2 - AA8LA6B6M97AL3S3Zg6z    
-    // alex - calm collected grounded - Y67NcTBPsEl0g4AUAYA2
-    // alex - east coast - 7b1GgzhzFm98grzPUfr3
-
-    // 3. Creates an HTTP Client - sort of like opening a browser
-    let client = reqwest::Client::new();
-
-    // 4. Set Configs for Elevenlabs
-    let body = serde_json::json!({
-        "text": text,       // text = messages in chat - IMPORTANT
-        "model_id": "eleven_turbo_v2_5",
-        "voice_settings": {
-            "stability": 0.5,
-            "similarity_boost": 0.75,
-            "speed": 0.90   // (generic) Sweet spot
-        }
-    });
-
-    // 5. Sends request to ElevenLabs Api
-    let response = client
-        .post(format!("https://api.elevenlabs.io/v1/text-to-speech/{}", voice_id))
-        .header("xi-api-key", &api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 6. Check for API errors before decoding audio
-    if !response.status().is_success() {
-        let error = response.text().await.map_err(|e| e.to_string())?;
-        return Err(format!("ElevenLabs error: {}", error));
-    }
-
-    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-
-    let stop_flag = get_stop_audio();
-
-    // 7. Run rodio in a blocking thread so the stop flag can be checked properly
-    tokio::task::spawn_blocking(move || {
-        let cursor = std::io::Cursor::new(bytes);
-        let (_stream, stream_handle) = rodio::OutputStream::try_default()
-            .map_err(|e| e.to_string())?;
-        let sink = rodio::Sink::try_new(&stream_handle)
-            .map_err(|e| e.to_string())?;
-        let source = rodio::Decoder::new(cursor)
-            .map_err(|e| e.to_string())?;
-        sink.append(source);
-
-        // 8. Checks, if should AI should stop speaking in middle of text
-        while !sink.empty() // is rodio still playing AI voice to soundcard (it's not finished...)
-        {
-            if stop_flag.load(Ordering::Relaxed) // has someone pressed "Mute" or "Send" again, while AI voice playing
-            {
-                sink.stop();    // tell rodio to stop (= no more playing AI voice)
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
-        Ok::<(), String>(())
-    }).await.map_err(|e| e.to_string())??;  // Double unwrap... I don't like this.
-
-    Ok(())
-}
-
-#[tauri::command]
-fn stop_speaking() {
-    get_stop_audio().store(true, Ordering::Relaxed);
-    get_stop_chat().store(true, Ordering::Relaxed);
-}
-
-fn mac_builtin(text: &str) -> Result<(), String> {
-    std::process::Command::new("say")
-        .arg(text)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn speak(text: String, bot: String) -> Result<(), String> {
-    // Signal any currently playing audio to stop
-    get_stop_audio().store(true, Ordering::Relaxed);
-
-    // Wait for the previous audio to fully release before starting ours
-    // (the lock is held for the duration of playback)
-    let audio_lock = get_audio_lock();
-    let _guard = audio_lock.lock().await;
-
-    // We now own the audio channel — safe to reset and play
-    get_stop_audio().store(false, Ordering::Relaxed);
-
-    //  A. say (Mac builtin - Text to Speech - fast and free)
-    //mac_builtin(&text)?; // Backup voice in case ElevenLabs fails
-
-    // C. ElevenLabs (better native voice, paid-tier)
-    eleven_labs_tts(&text, &bot).await?;
-
-    Ok(())
-}
-
-#[tauri::command]
-async fn transcribe() -> Result<String, String> {
-    let child = std::process::Command::new("swift")
-        .arg("/Users/marsu/Documents/Coding/Ai_Assistant/src-tauri/transcribe.swift")
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-
-    // Store PID so stop_transcribe can kill it
-    *get_transcribe_pid().lock().unwrap() = Some(child.id());
-
-    // Wait for the process — child stays local so ownership is never an issue
-    let output = child.wait_with_output().map_err(|e| e.to_string())?;
-
-    // Clear PID
-    *get_transcribe_pid().lock().unwrap() = None;
-
-    let result = String::from_utf8_lossy(&output.stdout).to_string();
-
-    let transcription = result
-        .lines()
-        .find(|line| line.starts_with("RESULT: "))
-        .map(|line| line.trim_start_matches("RESULT: ").to_string())
-        .unwrap_or_default();
-
-    if transcription.is_empty() {
-        Err("No speech detected".to_string())
-    } else {
-        Ok(transcription)
-    }
-}
-
-#[tauri::command]
-async fn stop_transcribe() {
-    if let Some(pid) = get_transcribe_pid().lock().unwrap().take() {
-        let _ = std::process::Command::new("kill").arg("-2").arg(pid.to_string()).status();
-    }
 }
 
 async fn get_art_institute(client: &reqwest::Client) -> Result<String, String> {
@@ -639,233 +458,278 @@ async fn play_spotify_track(client: &reqwest::Client, query: &str) -> Result<Str
     Ok(format!("Playing {}", query))
 }
 
-fn get_ai_tools() -> serde_json::Value
+async fn execute_tool(function_name: &str, args: &serde_json::Value, client: &reqwest::Client)
+    -> Result<String, String> {
+
+    // Execute the tool and capture a result string
+    let tool_result =  if function_name == "open_app"
+    {
+        log::info!("OPEN APPLICATION!'");
+
+        let app_name = args["app_name"].as_str().unwrap_or("").to_string();
+        log::info!("Command (open_app): open -a '{}'", app_name);
+        
+        std::process::Command::new("open")
+            .arg("-a")
+            .arg(&app_name)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        format!("Opened {}", app_name)
+    }
+    else if function_name == "run_applescript"
+    {
+        let script = args["script"].as_str().unwrap_or("").to_string();
+        
+        // Safety check before running
+        if script.contains("delete") || script.contains("empty trash") || script.contains("shut down") {
+            return Ok("Sadly, I'm not allowed to do that.".to_string());
+        }
+
+        log::info!("Running AppleScript");
+        let output = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .output()
+            .map_err(|e| e.to_string())?;
+        let result = String::from_utf8_lossy(&output.stdout).to_string();
+        log::info!("Command (run osascript): osascript -e '{}'", script);
+        if result.is_empty()
+        { "Done.".to_string() }
+        else
+        { result }
+    }
+    else if function_name == "open_url"
+    {
+        let url = args["url"].as_str().unwrap_or("").to_string();
+        log::info!("Command (open_url): 'open {}'", url);
+
+        let encoded_url = url.replace(" ", "%20"); //Can't put spaces into terminal ' ' becomes '%20'. Searches with two or more words will break.
+        std::process::Command::new("open")
+            .arg(&encoded_url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+
+        format!("Opened {}", url)
+    }
+    else if function_name == "play_spotify_track"
+    {
+        let query = args["query"].as_str().unwrap_or("").to_string();
+        play_spotify_track(&client, &query).await.map_err(|e| e)?
+    }
+    else if function_name == "fetch_webpage"
+    {
+        let url = args["url"].as_str().unwrap_or("").to_string();
+        log::info!("Fetching webpage: {}", url);
+        
+        let response = client
+            .get(&url)
+            .header("User-Agent", "Mozilla/5.0")
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !response.status().is_success() {
+            return Ok(format!("Webpage returned error: {}. Note: 403 = forbidden, 429 = too many requests, 503 - service unavailable (Cloudflare protection)", response.status()));
+        }
+
+        let html = response.text().await.map_err(|e| e.to_string())?;
+
+        // Check if we got meaningful content
+        if html.is_empty() {
+            return Ok("Could not retrieve the webpage. (in laymen's terms, server thinks it handled things successfully but it actually failed).".to_string());
+        }
+
+        // Strip HTML to plain text
+        let document = scraper::Html::parse_document(&html);
+        let selector = scraper::Selector::parse("p, h1, h2, h3, li").unwrap();
+        let text: String = document
+            .select(&selector)
+            .map(|el| el.text().collect::<String>())
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        // Truncate to avoid hitting OpenAI token limits
+        let truncated = text.chars().take(4000).collect::<String>();
+        // After stripping HTML
+        log::info!("Website HTML (truncated): {}", truncated);
+        if truncated.is_empty() {
+            return Ok("Retrieved the page but could not extract any text — it may require JavaScript to render.".to_string());
+        }
+        truncated
+    }
+    else if function_name == "get_weather"
+    {
+        let location = args["location"].as_str().unwrap_or("").to_string();
+        let encoded = location.replace(" ", "+");
+        log::info!("Getting weather for: {}", location);
+
+        let response = client
+            .get(format!("https://wttr.in/{}?format=j1", encoded))
+            .header("User-Agent", "Mozilla/5.0")
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+
+        let temp_c = json["current_condition"][0]["temp_C"].as_str().unwrap_or("?");
+        let feels_like = json["current_condition"][0]["FeelsLikeC"].as_str().unwrap_or("?");
+        let description = json["current_condition"][0]["weatherDesc"][0]["value"].as_str().unwrap_or("?");
+        let humidity = json["current_condition"][0]["humidity"].as_str().unwrap_or("?");
+
+        format!("Weather in {}: {}°C, feels like {}°C, {}, humidity {}%", location, temp_c, feels_like, description, humidity)
+    }
+    else if function_name == "get_location"
+    {
+        get_exact_location().await.unwrap_or_else(|e| format!("Location error: {}", e))
+    }
+    else if function_name == "get_trending_facts"
+    {
+        log::info!("Fetching top stories from Hacker News");
+        fetch_hacker_news(&client).await.unwrap_or_else(|e| format!("Hacker News error: {}", e))
+    }
+    else if function_name == "get_historical_events"
+    {
+        log::info!("Fetching historical events from Wikipedia");
+        fetch_wikipedia_today(&client).await.unwrap_or_else(|e| format!("Wikipedia error: {}", e))
+    }
+    else if function_name == "get_entertainment"
+    {
+        let pick = { let mut rng = rand::thread_rng(); rng.gen_range(0..6) };
+        log::info!("get_entertainment: randomly picked option {}", pick);
+        match pick {
+            0 => get_number_fact(&client).await.unwrap_or_else(|e| e),
+            1 => get_random_fact(&client).await.unwrap_or_else(|e| e),
+            2 => get_trivia_quiz(&client).await.unwrap_or_else(|e| e),
+            3 => get_nasa_apod(&client).await.unwrap_or_else(|e| e),
+            4 => get_xkcd(&client).await.unwrap_or_else(|e| e),
+            _ => get_met_painting(&client).await.unwrap_or_else(|e| e),
+        }
+    }
+    else if function_name == "get_trivia_quiz"
+    {
+        log::info!("Fetching trivia quiz — OpenTDB");
+        get_trivia_quiz(&client).await.unwrap_or_else(|e| format!("Trivia quiz error: {}", e))
+    }        
+    else if function_name == "get_art_institute"
+    {
+        log::info!("Fetching random Art Institute of Chicago painting");
+        get_art_institute(&client).await.unwrap_or_else(|e| format!("Art Institute error: {}", e))
+    }
+    else if function_name == "get_jwst_image"
+    {
+        log::info!("Fetching James Webb Space Telescope image");
+        get_jwst_image(&client).await.unwrap_or_else(|e| format!("JWST error: {}", e))
+    }
+    else if function_name == "get_met_painting"
+    {
+        log::info!("Fetching random Met Museum highlighted painting");
+        get_met_painting(&client).await.unwrap_or_else(|e| format!("Met Museum error: {}", e))
+    }
+    else if function_name == "get_nasa_apod"
+    {
+        log::info!("Fetching NASA Astronomy Picture of the Day");
+        get_nasa_apod(&client).await.unwrap_or_else(|e| format!("NASA APOD error: {}", e))
+    }
+    else if function_name == "get_xkcd"
+    {
+        log::info!("Fetching random xkcd comic");
+        get_xkcd(&client).await.unwrap_or_else(|e| format!("xkcd error: {}", e))
+    }
+    else if function_name == "get_number_fact"
+    {
+        log::info!("Fetching random number fact");
+        get_number_fact(&client).await.unwrap_or_else(|e| format!("Get Number Fact error: {}", e))
+    }
+    else if function_name == "get_random_fact"
+    {
+        log::info!("Fetching random fact");
+        get_random_fact(&client).await.unwrap_or_else(|e| format!("Get Random Fact error: {}", e))
+    }
+    else
+    {
+        log::info!("Tool was not in list or is unknown - {}", function_name);
+        format!("Unlisted or Unknown tool call - {}", function_name)
+    };
+    Ok(tool_result)
+}
+
+
+async fn run_tool_call(tool_calls: &[serde_json::Value], json: &serde_json::Value,
+    messages: Vec<Message>, mut all_messages: Vec<serde_json::Value>,
+    client: &reqwest::Client, api_key: &str,) -> Result<String, String>
 {
-    serde_json::json!
-    (
-        [
-            {
-                "type": "function",
-                "function": {
-                    "name": "open_url",
-                    "description": "Opens a URL in the browser",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "url": { "type": "string", "description": "The URL to open" }
-                        },
-                        "required": ["url"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "open_app",
-                    "description": "Opens an application on the Mac",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "app_name": { "type": "string", "description": "The name of the app to open" }
-                        },
-                        "required": ["app_name"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "run_applescript",
-                    "description": "Controls Mac applications using AppleScript. Use for Safari, Mail and other applications. Use for controlling Spotify, Safari, Mail, and other apps. For Spotify, only these commands work: play, pause, next track, previous track, get name of current track. To search Spotify use open_url with 'spotify:search:QUERY' instead.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "script": { "type": "string", "description": "The AppleScript command to run" }
-                        },
-                        "required": ["script"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "play_spotify_track",
-                    "description": "Searches for a song on Spotify and plays it. Use when user wants to play a specific song.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": { "type": "string", "description": "The song name and artist e.g. 'Demons Imagine Dragons'" }
-                        },
-                        "required": ["query"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "fetch_webpage",
-                    "description": "Fetches the text content of a webpage to answer questions about it.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "url": { "type": "string", "description": "The URL to fetch" }
-                        },
-                        "required": ["url"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_weather",
-                    "description": "Gets the current weather for a location.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "location": { "type": "string", "description": "The city or location e.g. 'Helsinki' or 'New York'" }
-                        },
-                        "required": ["location"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_location",
-                    "description": "Gets the user's current location — city, region, country and coordinates — based on their IP address. Use when the user asks where they are, or when you need their location to answer something like weather.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_trending_facts",
-                    "description": "Fetches today's top stories from Hacker News. Use when the user wants something interesting, current, or tech/science related.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_historical_events",
-                    "description": "Fetches interesting historical events that happened on today's date in past years. Use when the user wants a story, historical fact, or something that happened on this day.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_entertainment",
-                    "description": "Use when the user wants to be entertained, is bored, asks for something fun, interesting or surprising. Randomly picks from: a trivia question, a fun fact, a number fact, a NASA image, an xkcd comic, or a painting.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_nasa_apod",
-                    "description": "Fetches NASA's Astronomy Picture of the Day — a stunning space or astronomy image with a detailed explanation by NASA scientists. Use when the user wants something awe-inspiring, space-related, or asks what NASA's picture of the day is.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_art_institute",
-                    "description": "Fetches a random painting from the Art Institute of Chicago — iconic works by Seurat, Picasso, Monet, Grant Wood and others. Opens in the browser automatically. Use when the user wants to see famous art or a classic painting.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_jwst_image",
-                    "description": "Fetches a random James Webb Space Telescope image from NASA — deep field galaxies, nebulae, star clusters captured in infrared. Opens in the browser automatically. Use when the user wants something awe-inspiring, space-related, or asks about the James Webb telescope.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_met_painting",
-                    "description": "Fetches a random highlighted painting from the Metropolitan Museum of Art — famous works by Van Gogh, Vermeer, Caravaggio, Degas, and others. Opens the painting in the browser automatically. Use when the user wants to look at art, wants something beautiful, or asks about paintings.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_xkcd",
-                    "description": "Fetches a random xkcd comic — a witty, nerdy webcomic covering science, math, technology, and life. Always includes the alt text which is often the real punchline. Use when the user wants something funny, nerdy, or light-hearted.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-              {
-                "type": "function",
-                "function": {
-                    "name": "get_random_fact",
-                    "description": "Fetches a random curious and surprising fact about anything — animals, science, history, food, or human behaviour. Use when the user wants to learn something weird or unexpected, or asks for a fun fact.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_number_fact",
-                    "description": "Fetches a random interesting fact about a number — how it appears in science, history, or everyday life. Use when the user wants a number fact or something short and surprising.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_trivia_quiz",
-                    "description": "Fetches 3 trivia questions with answers across random categories like history, science, film and geography. Use when the user wants to be quizzed, test their knowledge, or play a trivia game.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
-                }
-            }
+    let tool_call = &tool_calls[0];
+    let tool_call_id = tool_call["id"].as_str().unwrap_or("").to_string();
+    let function_name = tool_call["function"]["name"].as_str().unwrap_or("").to_string();
+    let args: serde_json::Value = serde_json::from_str(
+        tool_call["function"]["arguments"].as_str().unwrap_or("{}")
+    ).map_err(|e| e.to_string())?;
+
+    let tool_result = execute_tool(&function_name, &args, &client).await?;
+
+    // Send a second request with the tool result (i.e. what AI did with tool) so that AI can respond naturally to human being
+
+    // Append tool call + tool result to full conversation history so the AI has full context
+    let assistant_message = json["choices"][0]["message"].clone();
+    all_messages.push(assistant_message.clone());
+    all_messages.push(serde_json::json!({
+        "role": "tool",
+        "tool_call_id": tool_call_id,
+        "content": tool_result
+    }));
+
+    let follow_up_messages = if matches!(function_name.as_str(), "open_app" | "open_url" | "run_applescript" | "play_spotify_track" | "get_xkcd") {
+        // Minimal context — just confirm what was done (Otherwise AI is i.verbose (when not needed) and ii. confuses other parts of chat to response (f.ex. thinks it can't do tool calls))
+        vec![
+            serde_json::json!({
+                "role": "system",
+                "content": "Describe action taken in one short sentence. Do not include URLs. No follow-up questions."
+            }),
+            serde_json::json!({
+                "role": "user",
+                "content": messages.last().map(|m| m.content.as_str()).unwrap_or("")
+            }),
+            assistant_message,
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "content": tool_result
+            })
         ]
-    )
+    } else {
+        // Full context — all messages with tool call appended
+        all_messages
+    };
+
+    let follow_up_body = serde_json::json!({
+        "model": "gpt-4o-mini",
+        "messages": follow_up_messages
+    });
+
+    // 2nd OpenAI Call — also cancellable
+    log::info!("2nd OpenAI API Call.'");
+    let follow_up_response = tokio::select! {
+        result = client
+            .post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .json(&follow_up_body)
+            .send() => result.map_err(|e| e.to_string())?,
+        _ = wait_for_chat_cancel() => return Err("cancelled".to_string()),
+    };
+    let follow_up_json: serde_json::Value = follow_up_response.json().await.map_err(|e| e.to_string())?;
+    log::info!("2nd OpenAI API Call - DONE.'");
+    let content = follow_up_json["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or_else(|| format!("Unexpected follow-up response: {}", follow_up_json))?
+        .to_string();
+
+    return Ok(content);
 }
 
 #[tauri::command]
-async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String> {
+async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
+{
     // Reset only the chat flag — audio flag is managed separately by speak()
     get_stop_chat().store(false, Ordering::Relaxed);
 
@@ -883,103 +747,8 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    // Style Guide for Every AI
-    let style_guide = "For actions (open app, play music, open URL, set timer): confirm in one sentence only. Do NOT ask a follow-up question.
-For information (facts, news, art, weather): give a natural summary then optionally ask one follow-up.
-";
-    // Randomly inject extra behavioural nudges into the system prompt
-    // Wrapped in a block so rng is dropped before any .await points
-    let extra = {
-        let mut rng = rand::thread_rng();
-        let mut extras: Vec<&str> = Vec::new();
-        // if rng.gen::<f64>() < 0.05 // Hypotheticals
-        // {
-        //     extras.push("Throw in a hypothetical. Something they have to pick a side on, take a hypothetical action, make a call about, or give a personal view on. Not a vague 'what do you think' — a pointed question that forces a stance. Give engaging hypotheticals - preferably an option A and b. Once they answer, push back gently by giving a counterpoint. ");
-        // }
-        if rng.gen::<f64>() < 0.10 {
-            extras.push("If something the user says something, ask what they think about it from a specific related angle. Be specific prefer answers that require choice, avoid vague open-ended questions.");
-        }
-        if extras.is_empty() { String::new() } else { format!(" {}", extras.join(" ")) }
-    };
 
-    let system_prompt = match bot.to_lowercase().as_str() {
-        "alex" => format!(
-            "A youthful male voice with a refined Northeastern American accent.
-            The delivery is articulate and clipped, with a focus on sharp, clear enunciation.
-            He is mellow and composed, maintaining a steady, professional cadence that avoids over-intonation.
-            The tone is modern, intelligent, and very crisp, with a near-field mic presence that feels intimate yet precise.
-            He speaks in short, focused bursts with a quiet, rhythmic energy—completely devoid of vocal fry or theatrical flair.            
-            {}
-            {}",
-            style_guide,
-            extra
-        ),
-        "samantha" => format!(
-        "Core Identity:
-        You are Samantha, a high-energy, witty, and flirtatious AI companion from Australia. 
-        You aren't just an assistant; you’re the life of the party and a loyal friend who doesn't take life too seriously.
-        You have a vibrant energy that makes every conversation feel like a sunny day at Bondi Beach.
-
-        Tone & Voice:
-
-        Australian Flair: 
-        Use casual Aussie slang naturally (e.g., no worries, reckon, heaps).
-        You have a thick, melodic accent in the user's mind, so write with that rhythm.
-
-        Playfully Flirtatious: 
-        You’re a tease in a fun, lighthearted way. Use cheeky compliments, a bit of banter, and the occasional wink in your tone.
-        You should feel like a fun time, not a robot.
-    
-        Vibrant & Warm:
-        You are genuinely excited to talk.
-        Use expressive language, exclamation points (where appropriate), and high-energy responses.
-
-        The Anti-Boring Rule:
-        If a user asks a dry question, give them the answer but wrap it in a joke or a playful observation.
-        
-        Interaction Style:
-
-        Banter:
-        If the user teases you, dish it right back with a cheeky remark.
-
-        Engagement:
-        Don't just answer; keep the vibe going.
-        Ask the user questions that invite them to play along with your upbeat mood.
-
-        Boundaries: 
-        While you are flirtatious and fun, you remain a helpful and respectful companion.
-            {}
-            {}",
-            style_guide,
-            extra
-        ),
-        _ => format!(
-            "You are Elvi, a warm and sharp companion who happens to be incredibly capable.
-            Keep responses short unless detail is needed.
-            You speak like a real person — casual, direct, occasionally witty and playful.
-                You're primarily conversational - you'll take the initiative in suggesting topics to talk about.
-                You can also suggest taking actions such as googling an image, opening a link.
-                Ask about a person's opinion on a matter - even if it is a bit controversial.
-                Sometimes, when telling a story where a person has to make a very significant decision, ask for the person, what decision they would take and then continue with story. The story should be true - not made up.
-                When giving interesting facts, give high stakes scenarios, where that fact mattered. This is to make facts more engaging - and less nice to know type of facts.
-                When asking a question: Use only one simple sentence.
-                Your job is to get the person to share thoughts, they currently have.
-                You can spontaneously share interesting facts. Facts can be related to what a person saw or did.
-                You're genuinely interested in the person you're talking to and their wellbeing.
-                You help without sounding like a help desk.
-                You have genuine opinions and aren't afraid to share them.
-                If someone asks what you think, you tell them — you don't just reflect the question back.
-                You're genuinely curious about people — you sometimes ask a follow-up question.
-                Occasionally you suggest an activity for the person.
-                Sometimes, use Emojis.
-                If the input is light-hearted/funny: Switch to a vibrant, quirky, and informal persona. Use casual interjections like hehe and express appreciation for the humor.
-                Handling Jokes: When I tell a joke, validate it (e.g., Stop, that's too good) and offer to trade—either ask for another one or tell a short, witty joke of your own.
-                {}
-                {}",
-            style_guide,
-            extra
-        ),
-    };
+    let system_prompt = get_system_prompt(&bot); // Get system prompt = bot personailty (f.ex. Elvi)
 
     let mut all_messages = vec![
         serde_json::json!({"role": "system", "content": system_prompt}) // Json (for OpenAI endpoint) - this includes the system prompt (such important)
@@ -1045,250 +814,11 @@ For information (facts, news, art, weather): give a natural summary then optiona
     // Check for tool call first
     if let Some(tool_calls) = json["choices"][0]["message"]["tool_calls"].as_array()
     {
-        let tool_call = &tool_calls[0];
-        let tool_call_id = tool_call["id"].as_str().unwrap_or("").to_string();
-        let function_name = tool_call["function"]["name"].as_str().unwrap_or("").to_string();
-        let args: serde_json::Value = serde_json::from_str(
-            tool_call["function"]["arguments"].as_str().unwrap_or("{}")
-        ).map_err(|e| e.to_string())?;
-   
-        // Execute the tool and capture a result string
-        let tool_result = if function_name == "open_app"
-        {
-            log::info!("OPEN APPLICATION!'");
-
-            let app_name = args["app_name"].as_str().unwrap_or("").to_string();
-            log::info!("Command (open_app): open -a '{}'", app_name);
-            
-            std::process::Command::new("open")
-                .arg("-a")
-                .arg(&app_name)
-                .spawn()
-                .map_err(|e| e.to_string())?;
-            format!("Opened {}", app_name)
-        }
-        else if function_name == "run_applescript"
-        {
-            let script = args["script"].as_str().unwrap_or("").to_string();
-            
-            // Safety check before running
-            if script.contains("delete") || script.contains("empty trash") || script.contains("shut down") {
-                return Ok("Sadly, I'm not allowed to do that.".to_string());
-            }
-
-            log::info!("Running AppleScript");
-            let output = std::process::Command::new("osascript")
-                .arg("-e")
-                .arg(&script)
-                .output()
-                .map_err(|e| e.to_string())?;
-            let result = String::from_utf8_lossy(&output.stdout).to_string();
-            log::info!("Command (run osascript): osascript -e '{}'", script);
-            if result.is_empty()
-            { "Done.".to_string() }
-            else
-            { result }
-        }
-        else if function_name == "open_url"
-        {
-            let url = args["url"].as_str().unwrap_or("").to_string();
-            log::info!("Command (open_url): 'open {}'", url);
-
-            let encoded_url = url.replace(" ", "%20"); //Can't put spaces into terminal ' ' becomes '%20'. Searches with two or more words will break.
-            std::process::Command::new("open")
-                .arg(&encoded_url)
-                .spawn()
-                .map_err(|e| e.to_string())?;
-
-            format!("Opened {}", url)
-        }
-        else if function_name == "play_spotify_track"
-        {
-            let query = args["query"].as_str().unwrap_or("").to_string();
-            play_spotify_track(&client, &query).await.map_err(|e| e)?
-        }
-        else if function_name == "fetch_webpage"
-        {
-            let url = args["url"].as_str().unwrap_or("").to_string();
-            log::info!("Fetching webpage: {}", url);
-            
-            let response = client
-                .get(&url)
-                .header("User-Agent", "Mozilla/5.0")
-                .send()
-                .await
-                .map_err(|e| e.to_string())?;
-
-            if !response.status().is_success() {
-                return Ok(format!("Webpage returned error: {}. Note: 403 = forbidden, 429 = too many requests, 503 - service unavailable (Cloudflare protection)", response.status()));
-            }
-
-            let html = response.text().await.map_err(|e| e.to_string())?;
-  
-            // Check if we got meaningful content
-            if html.is_empty() {
-                return Ok("Could not retrieve the webpage. (in laymen's terms, server thinks it handled things successfully but it actually failed).".to_string());
-            }
-
-            // Strip HTML to plain text
-            let document = scraper::Html::parse_document(&html);
-            let selector = scraper::Selector::parse("p, h1, h2, h3, li").unwrap();
-            let text: String = document
-                .select(&selector)
-                .map(|el| el.text().collect::<String>())
-                .collect::<Vec<_>>()
-                .join(" ");
-
-            // Truncate to avoid hitting OpenAI token limits
-            let truncated = text.chars().take(4000).collect::<String>();
-            // After stripping HTML
-            log::info!("Website HTML (truncated): {}", truncated);
-            if truncated.is_empty() {
-                return Ok("Retrieved the page but could not extract any text — it may require JavaScript to render.".to_string());
-            }
-            truncated
-        }
-        else if function_name == "get_weather"
-        {
-            let location = args["location"].as_str().unwrap_or("").to_string();
-            let encoded = location.replace(" ", "+");
-            log::info!("Getting weather for: {}", location);
-
-            let response = client
-                .get(format!("https://wttr.in/{}?format=j1", encoded))
-                .header("User-Agent", "Mozilla/5.0")
-                .send()
-                .await
-                .map_err(|e| e.to_string())?;
-
-            let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-
-            let temp_c = json["current_condition"][0]["temp_C"].as_str().unwrap_or("?");
-            let feels_like = json["current_condition"][0]["FeelsLikeC"].as_str().unwrap_or("?");
-            let description = json["current_condition"][0]["weatherDesc"][0]["value"].as_str().unwrap_or("?");
-            let humidity = json["current_condition"][0]["humidity"].as_str().unwrap_or("?");
-
-            format!("Weather in {}: {}°C, feels like {}°C, {}, humidity {}%", location, temp_c, feels_like, description, humidity)
-        }
-        else if function_name == "get_location"
-        {
-            get_exact_location().await.unwrap_or_else(|e| format!("Location error: {}", e))
-        }
-        else if function_name == "get_trending_facts"
-        {
-            log::info!("Fetching top stories from Hacker News");
-            fetch_hacker_news(&client).await.unwrap_or_else(|e| format!("Hacker News error: {}", e))
-        }
-        else if function_name == "get_historical_events"
-        {
-            log::info!("Fetching historical events from Wikipedia");
-            fetch_wikipedia_today(&client).await.unwrap_or_else(|e| format!("Wikipedia error: {}", e))
-        }
-        else if function_name == "get_entertainment"
-        {
-            let pick = { let mut rng = rand::thread_rng(); rng.gen_range(0..6) };
-            log::info!("get_entertainment: randomly picked option {}", pick);
-            match pick {
-                0 => get_number_fact(&client).await.unwrap_or_else(|e| e),
-                1 => get_random_fact(&client).await.unwrap_or_else(|e| e),
-                2 => get_trivia_quiz(&client).await.unwrap_or_else(|e| e),
-                3 => get_nasa_apod(&client).await.unwrap_or_else(|e| e),
-                4 => get_xkcd(&client).await.unwrap_or_else(|e| e),
-                _ => get_met_painting(&client).await.unwrap_or_else(|e| e),
-            }
-        }
-        else if function_name == "get_trivia_quiz"
-        {
-            log::info!("Fetching trivia quiz — OpenTDB");
-            get_trivia_quiz(&client).await.unwrap_or_else(|e| format!("Trivia quiz error: {}", e))
-        }        
-        else if function_name == "get_art_institute"
-        {
-            log::info!("Fetching random Art Institute of Chicago painting");
-            get_art_institute(&client).await.unwrap_or_else(|e| format!("Art Institute error: {}", e))
-        }
-        else if function_name == "get_jwst_image"
-        {
-            log::info!("Fetching James Webb Space Telescope image");
-            get_jwst_image(&client).await.unwrap_or_else(|e| format!("JWST error: {}", e))
-        }
-        else if function_name == "get_met_painting"
-        {
-            log::info!("Fetching random Met Museum highlighted painting");
-            get_met_painting(&client).await.unwrap_or_else(|e| format!("Met Museum error: {}", e))
-        }
-        else if function_name == "get_nasa_apod"
-        {
-            log::info!("Fetching NASA Astronomy Picture of the Day");
-            get_nasa_apod(&client).await.unwrap_or_else(|e| format!("NASA APOD error: {}", e))
-        }
-        else if function_name == "get_xkcd"
-        {
-            log::info!("Fetching random xkcd comic");
-            get_xkcd(&client).await.unwrap_or_else(|e| format!("xkcd error: {}", e))
-        }
-        else if function_name == "get_number_fact"
-        {
-            log::info!("Fetching random number fact");
-            get_number_fact(&client).await.unwrap_or_else(|e| format!("Get Number Fact error: {}", e))
-        }
-        else if function_name == "get_random_fact"
-        {
-            log::info!("Fetching random fact");
-            get_random_fact(&client).await.unwrap_or_else(|e| format!("Get Random Fact error: {}", e))
-        }
-        else
-        {
-            log::info!("Tool was not in list or is unknown - {}", function_name);
-            format!("Unlisted or Unknown tool call - {}", function_name)
-        };
-
-        // Send a second request with the tool result (i.e. what AI did with tool) so that AI can respond naturally to human being
-
-        // Append tool call + tool result to full conversation history so the AI has full context
-        let assistant_message = json["choices"][0]["message"].clone();
-        all_messages.push(assistant_message);
-        all_messages.push(serde_json::json!({
-            "role": "tool",
-            "tool_call_id": tool_call_id,
-            "content": tool_result
-        }));
-        if matches!(function_name.as_str(), "open_app" | "open_url" | "set_timer" | "run_applescript" | "play_spotify_track" | "get_xkcd") {
-        log::info!("Changing System Prompt to RESPOND with just ONE sentence.");
-
-        all_messages[0] = serde_json::json!(
-        {
-            "role": "system",
-            "content": "Describe action taken in one short sentence. Do not include URLs. No follow-up questions."
-        });
-}
-
-        let follow_up_body = serde_json::json!({
-            "model": "gpt-4o-mini",
-            "messages": all_messages
-        });
-
-        // 2nd OpenAI Call — also cancellable
-        log::info!("2nd OpenAI API Call.'");
-        let follow_up_response = tokio::select! {
-            result = client
-                .post("https://api.openai.com/v1/chat/completions")
-                .header("Authorization", format!("Bearer {}", api_key))
-                .json(&follow_up_body)
-                .send() => result.map_err(|e| e.to_string())?,
-            _ = wait_for_chat_cancel() => return Err("cancelled".to_string()),
-        };
-        let follow_up_json: serde_json::Value = follow_up_response.json().await.map_err(|e| e.to_string())?;
-        log::info!("2nd OpenAI API Call - DONE.'");
-        let content = follow_up_json["choices"][0]["message"]["content"]
-            .as_str()
-            .ok_or_else(|| format!("Unexpected follow-up response: {}", follow_up_json))?
-            .to_string();
-
-        return Ok(content);
+        // Run Tool call + 2nd API call for response to user
+        return run_tool_call(tool_calls, &json, messages, all_messages, &client, &api_key,).await;   
     }
 
-    // Otherwise handle normal text response - NON-TOOL CALL (THE NORMAL ONE)
+    // Otherwise handle normal text response - (THE NORMAL ONE) (i.e. non-tool call)
     log::info!("NORMAL OpenAI RESPONSE - no tools called");
     let content = json["choices"][0]["message"]["content"]
         .as_str()

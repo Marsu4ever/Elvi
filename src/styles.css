@@ -138,10 +138,17 @@ body {
 }
 
 .bot-name {
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: #dde3f0;
   letter-spacing: 0.02em;
+}
+
+.bot-tagline {
+  font-size: 0.82rem;
+  font-style: italic;
+  color: rgba(221, 227, 240, 0.4);
+  letter-spacing: 0.03em;
 }
 
 /* Header */
