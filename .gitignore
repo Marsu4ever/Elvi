@@ -21,6 +21,13 @@ WhisperModels
 .env.local
 .env.*.local
 
+# screenshots
+screenshots/
+
+# Keep theses specific screenshots though
+!screenshots/landing_page.png
+!screenshots/chat.png
+
 # Build output
 dist/
 build/
