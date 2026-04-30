@@ -8,6 +8,7 @@ A conversational AI for Mac with real personality and voice.
 ![ElevenLabs](https://img.shields.io/badge/ElevenLabs-black?logoColor=white)
 
 <img src="screenshots/landing_page.png" width="600"/>
+<img src="screenshots/chat.png" width="600"/>
 
 [▶ Watch it in action](your-video-link)
 
