@@ -39,3 +39,12 @@ A conversational AI for Mac with real personality and voice.
 - **OpenAI GPT-4o-mini** — conversation and tool calling
 - **ElevenLabs** — realistic AI voices
 - **Apple Speech Recognition** — on-device speech recognition
+
+---
+
+## 💡 About this project
+
+The goal was to build a voice assistant that feels more natural and engaging than typical chat interfaces.
+It combines real-time speech, tool integrations, and distinct personalities to create a more human-like experience.
+
+If you’re interested in how it works, check out the code or feel free to ask questions!
