@@ -1,6 +1,6 @@
 # Elvi
 
-A conversational AI for Mac with real personality and voice.
+A conversational AI assistant for Mac with real personality and voice.
 
 ![Rust](https://img.shields.io/badge/Rust-orange?logo=rust&logoColor=white)
 ![Tauri](https://img.shields.io/badge/Tauri-24C8D8?logo=tauri&logoColor=white)
