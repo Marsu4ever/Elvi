@@ -10,7 +10,7 @@ A conversational AI for Mac with real personality and voice.
 <img src="screenshots/landing_page.png" width="600"/>
 <img src="screenshots/chat.png" width="600"/>
 
-[▶ Watch it in action](your-video-link)
+[▶ Watch it in action]([your-video-link](https://www.youtube.com/watch?v=D_O9ORQ0SDM))
 
 ---
 
