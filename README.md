@@ -7,8 +7,10 @@ A conversational AI for Mac with real personality and voice.
 ![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white)
 ![ElevenLabs](https://img.shields.io/badge/ElevenLabs-black?logoColor=white)
 
-<img src="screenshots/landing_page.png" width="500"/>
-<img src="screenshots/chat.png" width="500"/>
+<p align="center">
+  <img src="screenshots/landing_page.png" width="45%"/>
+  <img src="screenshots/chat.png" width="45%"/>
+</p>
 
 ## 🎥 Demo
 <p align="center">🚀 See it in action</p>
