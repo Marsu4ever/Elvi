@@ -13,13 +13,11 @@ A conversational AI for Mac with real personality and voice.
 </p>
 
 ## 🎥 Demo
-<p align="center">🚀 See it in action</p>
+<p>🚀 See it in action</p>
 
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=D_O9ORQ0SDM">
-    <img src="screenshots/youtube_thumbnail.png" width="400"/>
-  </a>
-</p>
+<a href="https://www.youtube.com/watch?v=D_O9ORQ0SDM">
+  <img src="screenshots/youtube_thumbnail.png" width="400"/>
+</a>
 
 ---
 
