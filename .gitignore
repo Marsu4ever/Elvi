@@ -27,6 +27,7 @@ screenshots/
 # Keep theses specific screenshots though
 !screenshots/landing_page.png
 !screenshots/chat.png
+!screenshots/youtube_thumbnail.png
 
 # Build output
 dist/
