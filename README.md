@@ -11,7 +11,9 @@ A conversational AI for Mac with real personality and voice.
 <img src="screenshots/chat.png" width="600"/>
 
 ## 🎥 Demo
-[![Watch the demo](screenshots/youtube_thumbnail.png)](https://www.youtube.com/watch?v=D_O9ORQ0SDM)
+<a href="https://www.youtube.com/watch?v=D_O9ORQ0SDM">
+  <img src="screenshots/youtube_thumbnail.png" width="600"/>
+</a>
 
 ---
 
