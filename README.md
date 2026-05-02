@@ -13,7 +13,7 @@ A conversational AI for Mac with real personality and voice.
 </p>
 
 ## 🎥 Demo
-<p>🚀 See it in action</p>
+<p>🚀 See it in action (4.5 min)</p>
 
 <a href="https://www.youtube.com/watch?v=D_O9ORQ0SDM">
   <img src="screenshots/youtube_thumbnail.png" width="400"/>
