@@ -35,7 +35,7 @@ pub fn get_ai_tools() -> serde_json::Value
                 "type": "function",
                 "function": {
                     "name": "run_applescript",
-                    "description": "Controls Mac applications using AppleScript. Use for Safari, Mail and other applications. Use for controlling Spotify, Safari, Mail, and other apps. For Spotify, only these commands work: play, pause, next track, previous track, get name of current track. To search Spotify use open_url with 'spotify:search:QUERY' instead.",
+                    "description": "Controls Mac applications using AppleScript. Use for Safari, Mail, and other Mac apps. Do NOT use for Spotify — use play_spotify, stop_spotify or play_spotify_track instead.",
                     "parameters": {
                         "type": "object",
                         "properties": {

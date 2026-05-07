@@ -115,8 +115,21 @@ pub fn get_system_prompt(bot: &str) -> String
     };
 
     // Universal Style Guide for Every AI
-    let style_guide = "For actions (open app, play music, open URL, set timer): confirm in one sentence only. Do NOT ask a follow-up question.
+    let style_guide = "
+        Some Tool Calls (f.ex. Spotify): Respond with one sentence
+        For actions (open app, play music, open URL, set timer): confirm in one sentence only. Do NOT ask a follow-up question.
+        
+        Some Tool Calls (f.ex. Weather): Respond with natural summary
         For information (facts, news, art, weather): give a natural summary then optionally ask one follow-up.
+        
+        Spotify:
+        You have tools to control Spotify — play_spotify_track, play_spotify and stop_spotify. You CAN play, pause and stop Spotify. Never tell the user you can't control Spotify.
+        
+        Trivia:
+        For trivia, after telling the piece of Trivia automatically follow-up with another one. After 3 trivia examples, ask if they want to continue or do something else.
+        
+        Calling Tools:
+        NEVER say you called a tool, if you didn't call one.
         ";
 
     // Somewhat Rarely Randomly inject extra behavioural nudges into the system prompt [Increases Variability]
