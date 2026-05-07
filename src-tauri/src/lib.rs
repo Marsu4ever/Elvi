@@ -738,6 +738,7 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
     }
     log::info!("chat function - START'");
 
+    // OpenAI API KEY
     let api_key = std::env::var("OPENAI_API_KEY")
         .map_err(|_| "OPENAI_API_KEY environment variable not set".to_string())?;
 
@@ -756,19 +757,23 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
 
     all_messages.extend(messages.iter().map(|m| serde_json::json!(m))); // Changes Message struct (i.e. conversation history) into Useful JSON (for OpenAI endpoint) - Now we talking.
 
-    let body = serde_json::json!(
+    // OpenAI Verson
+       let body = serde_json::json!(
     {
-        "model": "gpt-4o-mini",
+        "model": "gpt-4-turbo", // gpt-4o [best balance of speed and intelligence], gpt-4o-mini [what you have now, fast and cheap], o3-mini [strong reasoning, good for complex questions], claude-sonnet-4-5 [very strong, great conversation quality], claude-haiku-3-5 [fast and cheap, similar tier to gpt-4o-mini], grok-3, grok-3-mini
         "messages": all_messages,   //Include conversation history
         "tools": get_ai_tools(),    // Get Tools that AI can call. f.ex. open Spotify, google search with browser etc
         "parallel_tool_calls": false
     });
 
+    // OpenAI
+    let api_url = "https://api.openai.com/v1/chat/completions";
+
     // 1st OpenAI Call — cancelled immediately if stop flag is set
     log::info!("Chat - 1st Open AI call'");
     let response = tokio::select! {
         result = client
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(api_url)
             .header("Authorization", format!("Bearer {}", api_key))
             .json(&body)
             .send() => result.map_err(|e| e.to_string())?,

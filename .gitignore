@@ -15,6 +15,8 @@ Control Mac Applications
 Notes
 Prompting
 WhisperModels
+AI models
+Banter
 
 # Environment variables (keep secrets safe!)
 .env
