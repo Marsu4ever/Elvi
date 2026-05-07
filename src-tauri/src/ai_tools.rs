@@ -61,6 +61,19 @@ pub fn get_ai_tools() -> serde_json::Value
             },
             {
                 "type": "function",
+                "function": 
+                {
+                    "name": "stop_spotify",
+                    "description": "Pauses or stops Spotify playback. Use when the user wants to stop, pause or silence the music.",
+                    "parameters":
+                    {
+                        "type": "object",
+                        "properties": {}
+                    }
+                }
+            },
+            {
+                "type": "function",
                 "function": {
                     "name": "fetch_webpage",
                     "description": "Fetches the text content of a webpage to answer questions about it.",

@@ -516,6 +516,15 @@ async fn execute_tool(function_name: &str, args: &serde_json::Value, client: &re
         let query = args["query"].as_str().unwrap_or("").to_string();
         play_spotify_track(&client, &query).await.map_err(|e| e)?
     }
+    else if function_name == "stop_spotify"
+    {
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"Spotify\" to pause")
+            .output()
+            .map_err(|e| e.to_string())?;
+        "Spotify paused".to_string()
+    } 
     else if function_name == "fetch_webpage"
     {
         let url = args["url"].as_str().unwrap_or("").to_string();
