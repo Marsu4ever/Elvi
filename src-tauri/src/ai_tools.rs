@@ -61,10 +61,23 @@ pub fn get_ai_tools() -> serde_json::Value
             },
             {
                 "type": "function",
-                "function": 
+                "function":
                 {
                     "name": "stop_spotify",
-                    "description": "Pauses or stops Spotify playback. Use when the user wants to stop, pause or silence the music.",
+                    "description": "Pauses or stops Spotify playback. Use when the user says stop, pause, stop music, stop spotify, silence, mute music, or wants music to stop.",
+                    "parameters":
+                    {
+                        "type": "object",
+                        "properties": {}
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function":
+                {
+                    "name": "play_spotify",
+                    "description": "Resumes or unpauses Spotify. Use when the user says play, resume, unpause, start music, press play, or wants music to continue playing.",
                     "parameters":
                     {
                         "type": "object",
