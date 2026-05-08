@@ -465,8 +465,23 @@ async fn execute_tool(function_name: &str, args: &serde_json::Value, client: &re
     let tool_result =  if function_name == "open_app"
     {
         log::info!("OPEN APPLICATION!'");
-
         let app_name = args["app_name"].as_str().unwrap_or("").to_string();
+
+        let blocked_apps = [
+            "terminal",           // could run destructive shell commands
+            "activity monitor",   // exposes sensitive system processes and memory
+            "keychain access",    // stores all saved passwords and credentials
+            "script editor",      // could write and run arbitrary AppleScripts
+            "automator",          // could create and run automated workflows
+            "system preferences", // could change security and privacy settings
+            "system settings",    // macOS Ventura+ name for system preferences
+            "disk utility",       // could format or erase drives
+        ];
+
+        if blocked_apps.iter().any(|a| app_name.to_lowercase().contains(a)) {
+            return Ok("I'm not allowed to open that.".to_string());
+        }
+
         log::info!("Command (open_app): open -a '{}'", app_name);
         
         std::process::Command::new("open")
@@ -481,7 +496,21 @@ async fn execute_tool(function_name: &str, args: &serde_json::Value, client: &re
         let script = args["script"].as_str().unwrap_or("").to_string();
         
         // Safety check before running
-        if script.contains("delete") || script.contains("empty trash") || script.contains("shut down") {
+        if script.contains("delete")        // prevent deleting files or items
+        || script.contains("empty trash")   // prevent permanently emptying trash
+        || script.contains("shut down")     // prevent shutting down the Mac
+        || script.contains("restart")       // prevent rebooting the Mac
+        || script.contains("rm ")           // prevent shell file removal commands
+        || script.contains("format")        // prevent disk formatting
+        || script.contains("sudo")          // prevent elevated privilege commands
+        || script.contains("password")      // prevent accessing stored passwords
+        || script.contains("keychain")      // prevent accessing macOS keychain credentials
+        || script.contains("log out")       // prevent logging out the user
+        || script.contains("sleep")         // prevent putting Mac to sleep
+        || script.contains("do shell script") // prevent running arbitrary shell commands via AppleScript
+        || script.contains("write to file") // prevent writing files
+        || script.contains("clipboard")     // prevent accessing clipboard contents
+        {
             return Ok("Sadly, I'm not allowed to do that.".to_string());
         }
 
@@ -497,6 +526,17 @@ async fn execute_tool(function_name: &str, args: &serde_json::Value, client: &re
         { "Done.".to_string() }
         else
         { result }
+    }
+    else if function_name == "set_low_power_mode"
+    {
+        log::info!("Run low powermode");
+        std::process::Command::new("pmset")
+            .arg("-a")
+            .arg("lowpowermode")
+            .arg("1")
+            .output()
+            .map_err(|e| e.to_string())?;
+        "Low power mode enabled".to_string()
     }
     else if function_name == "open_url"
     {
@@ -849,6 +889,56 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
         .as_str()
         .ok_or_else(|| format!("Unexpected response: {}", json))?
         .to_string();
+
+    // If the AI claims to have done an action but called no tool — correct it
+    let action_words = ["toggled", "turned on", "turned off", "enabled", "disabled",
+                        "opened", "launched", "playing", "paused", "stopped", "switched"];
+    let response_lower = content.to_lowercase();
+    let claims_action = action_words.iter().any(|w| response_lower.contains(w));
+
+    if claims_action {
+        log::info!("Hallucination guard: AI claimed an action but called no tool — forcing tool retry");
+
+        all_messages.push(serde_json::json!({ "role": "assistant", "content": &content }));
+        all_messages.push(serde_json::json!({
+            "role": "system",
+            "content": "You claimed to perform an action but did NOT call any tool — nothing actually happened. You DO have the tools to do this. Call the correct tool right now to fulfil the user's request. Do not explain, do not say you can't — just call the tool."
+        }));
+
+        // Force a tool call — tool_choice required means it MUST call one
+        let correction_body = serde_json::json!({
+            "model": "gpt-4-turbo",
+            "messages": all_messages,
+            "tools": get_ai_tools(),
+            "tool_choice": "required",
+            "parallel_tool_calls": false
+        });
+
+        let correction_response = tokio::select! {
+            result = client
+                .post("https://api.openai.com/v1/chat/completions")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .json(&correction_body)
+                .send() => result.map_err(|e| e.to_string())?,
+            _ = wait_for_chat_cancel() => return Err("cancelled".to_string()),
+        };
+
+        let correction_json: serde_json::Value = correction_response.json().await.map_err(|e| e.to_string())?;
+
+        // If the correction call produced a tool call — run it
+        if let Some(tool_calls) = correction_json["choices"][0]["message"]["tool_calls"].as_array() {
+            log::info!("Hallucination guard: correction call produced a tool call — executing it");
+            return run_tool_call(tool_calls, &correction_json, messages, all_messages, &client, &api_key).await;
+        }
+
+        let corrected = correction_json["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or(&content)
+            .to_string();
+
+        log::info!("Correction response: '{}'", corrected);
+        return Ok(corrected);
+    }
 
     log::info!("'{}'", content);
     Ok(content)

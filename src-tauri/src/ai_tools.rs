@@ -35,13 +35,24 @@ pub fn get_ai_tools() -> serde_json::Value
                 "type": "function",
                 "function": {
                     "name": "run_applescript",
-                    "description": "Controls Mac applications using AppleScript. Use for Safari, Mail, and other Mac apps. Do NOT use for Spotify — use play_spotify, stop_spotify or play_spotify_track instead.",
+                    "description": "Use this tool to toggle dark mode, control Safari, Mail, Notes, Reminders and other Mac apps via AppleScript. Do NOT use for Spotify — use play_spotify, stop_spotify or play_spotify_track instead.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "script": { "type": "string", "description": "The AppleScript command to run" }
                         },
                         "required": ["script"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "set_low_power_mode",
+                    "description": "Enables low power mode on the Mac to save battery.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {}
                     }
                 }
             },
@@ -216,7 +227,7 @@ pub fn get_ai_tools() -> serde_json::Value
                 "type": "function",
                 "function": {
                     "name": "get_random_fact",
-                    "description": "Fetches a random curious and surprising fact about anything — animals, science, history, food, or human behaviour. Use when the user wants to learn something weird or unexpected, or asks for a fun fact.",
+                    "description": "Fetches a random curious and surprising fact about anything — animals, science, history, food, or human behaviour. Always use when the user wants to learn something weird, surprising or unexpected, or asks for a fun fact.",
                     "parameters": {
                         "type": "object",
                         "properties": {}
