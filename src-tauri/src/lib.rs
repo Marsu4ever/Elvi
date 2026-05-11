@@ -527,16 +527,15 @@ async fn execute_tool(function_name: &str, args: &serde_json::Value, client: &re
         else
         { result }
     }
-    else if function_name == "set_low_power_mode"
+    else if function_name == "toggle_dark_mode"
     {
-        log::info!("Run low powermode");
-        std::process::Command::new("pmset")
-            .arg("-a")
-            .arg("lowpowermode")
-            .arg("1")
+        log::info!("Toggling dark mode");
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to tell appearance preferences to set dark mode to not dark mode")
             .output()
             .map_err(|e| e.to_string())?;
-        "Low power mode enabled".to_string()
+        "Dark mode toggled.".to_string()
     }
     else if function_name == "open_url"
     {
@@ -820,7 +819,7 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
     // OpenAI Verson
        let body = serde_json::json!(
     {
-        "model": "gpt-4-turbo", // gpt-4o [best balance of speed and intelligence], gpt-4o-mini [what you have now, fast and cheap], o3-mini [strong reasoning, good for complex questions], claude-sonnet-4-5 [very strong, great conversation quality], claude-haiku-3-5 [fast and cheap, similar tier to gpt-4o-mini], grok-3, grok-3-mini
+        "model": "gpt-4o-mini", // gpt-4o [best balance of speed and intelligence], gpt-4o-mini [what you have now, fast and cheap], o3-mini [strong reasoning, good for complex questions], claude-sonnet-4-5 [very strong, great conversation quality], claude-haiku-3-5 [fast and cheap, similar tier to gpt-4o-mini], grok-3, grok-3-mini
         "messages": all_messages,   //Include conversation history
         "tools": get_ai_tools(),    // Get Tools that AI can call. f.ex. open Spotify, google search with browser etc
         "parallel_tool_calls": false
@@ -879,6 +878,8 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
     // Check for tool call first
     if let Some(tool_calls) = json["choices"][0]["message"]["tool_calls"].as_array()
     {
+        log::info!("It's A TOOL!");
+
         // Run Tool call + 2nd API call for response to user
         return run_tool_call(tool_calls, &json, messages, all_messages, &client, &api_key,).await;   
     }
@@ -890,28 +891,29 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
         .ok_or_else(|| format!("Unexpected response: {}", json))?
         .to_string();
 
+    log::info!("Normal response text before GUARD: '{}'", content);
     // If the AI claims to have done an action but called no tool — correct it
-    let action_words = ["toggled", "turned on", "turned off", "enabled", "disabled",
-                        "opened", "launched", "playing", "paused", "stopped", "switched"];
+    let action_words = ["toggled", "toggle", "activated", "switching", "switched", "turned on", "turned off", 
+                    "enabled", "disabled", "opened", "launched", "playing", "paused", 
+                    "stopped", "changed", "set it", "done that",
+                    "wrote", "created", "noted", "added", "saved"];
+
+
     let response_lower = content.to_lowercase();
     let claims_action = action_words.iter().any(|w| response_lower.contains(w));
 
     if claims_action {
-        log::info!("Hallucination guard: AI claimed an action but called no tool — forcing tool retry");
+        log::info!("Hallucination guard: AI claimed an action but called no tool — sending correction");
 
         all_messages.push(serde_json::json!({ "role": "assistant", "content": &content }));
         all_messages.push(serde_json::json!({
             "role": "system",
-            "content": "You claimed to perform an action but did NOT call any tool — nothing actually happened. You DO have the tools to do this. Call the correct tool right now to fulfil the user's request. Do not explain, do not say you can't — just call the tool."
+            "content": "You claimed to perform an action but did NOT call any tool — nothing actually happened. Tell the user honestly that you didn't do it and ask if they want you to try again. Simply say that. Nothing more."
         }));
 
-        // Force a tool call — tool_choice required means it MUST call one
         let correction_body = serde_json::json!({
-            "model": "gpt-4-turbo",
-            "messages": all_messages,
-            "tools": get_ai_tools(),
-            "tool_choice": "required",
-            "parallel_tool_calls": false
+            "model": "gpt-4o-mini",
+            "messages": all_messages
         });
 
         let correction_response = tokio::select! {
@@ -924,13 +926,6 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
         };
 
         let correction_json: serde_json::Value = correction_response.json().await.map_err(|e| e.to_string())?;
-
-        // If the correction call produced a tool call — run it
-        if let Some(tool_calls) = correction_json["choices"][0]["message"]["tool_calls"].as_array() {
-            log::info!("Hallucination guard: correction call produced a tool call — executing it");
-            return run_tool_call(tool_calls, &correction_json, messages, all_messages, &client, &api_key).await;
-        }
-
         let corrected = correction_json["choices"][0]["message"]["content"]
             .as_str()
             .unwrap_or(&content)

@@ -35,7 +35,7 @@ pub fn get_ai_tools() -> serde_json::Value
                 "type": "function",
                 "function": {
                     "name": "run_applescript",
-                    "description": "Use this tool to toggle dark mode, control Safari, Mail, Notes, Reminders and other Mac apps via AppleScript. Do NOT use for Spotify — use play_spotify, stop_spotify or play_spotify_track instead.",
+                    "description": "This uses Applescript to control Mac applications. Use this tool to control Safari with f.ex. urls or google searches. Write Mails. Write a new Note. Set a new Reminder. Works on other Mac Applications as well. Try this tool, if the task requires more than just opening an app. Do NOT use for Spotify — use play_spotify, stop_spotify or play_spotify_track instead.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -48,8 +48,8 @@ pub fn get_ai_tools() -> serde_json::Value
             {
                 "type": "function",
                 "function": {
-                    "name": "set_low_power_mode",
-                    "description": "Enables low power mode on the Mac to save battery.",
+                    "name": "toggle_dark_mode",
+                    "description": "Toggles dark mode on or off on the Mac. Use when the user says toggle dark mode, switch dark mode, turn on dark mode, turn off dark mode, light mode, dark mode.",
                     "parameters": {
                         "type": "object",
                         "properties": {}
