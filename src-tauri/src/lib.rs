@@ -9,7 +9,7 @@ mod speak;
 use speak::{speak, stop_speaking};
 
 mod system_prompt;
-use system_prompt::{get_system_prompt};
+use system_prompt::{select_bot_personality};
 
 mod ai_tools;
 use ai_tools::{get_ai_tools};
@@ -789,11 +789,12 @@ async fn run_tool_call(tool_calls: &[serde_json::Value], json: &serde_json::Valu
 #[tauri::command]
 async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
 {
-    // Reset only the chat flag — audio flag is managed separately by speak()
+    // Resets only the chat flag to FALSE - i.e.e chat flag is global variable. chat needs FALSE to run. [In case user has canceled an AI response mid-way, which sets global variable to TRUE, AI checks flag and aborts program.]
     get_stop_chat().store(false, Ordering::Relaxed);
 
-    if let Some(last) = messages.last() {
-        log::info!("'{}'", last.content);
+    if let Some(latest_message) = messages.last() 
+    {
+        log::info!("'{}'", latest_message.content); // Prints - latest message from User (i.e. for Terminal)
     }
     log::info!("chat function - START'");
 
@@ -802,13 +803,13 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
         .map_err(|_| "OPENAI_API_KEY environment variable not set".to_string())?;
 
     log::info!("chat - reqwest call'");
-    let client = reqwest::Client::builder()
+    let client = reqwest::Client::builder() // Make HTTP client (i.e. engine of browser - I like to call this Fake Browser to remind myself it acts like a browser, but no UI and stuff)
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
 
 
-    let system_prompt = get_system_prompt(&bot); // Get system prompt = bot personailty (f.ex. Elvi)
+    let system_prompt = select_bot_personality(&bot); // Get system prompt = bot personailty (f.ex. Elvi). System prompt is later sent to OpenAI.
 
     let mut all_messages = vec![
         serde_json::json!({"role": "system", "content": system_prompt}) // Json (for OpenAI endpoint) - this includes the system prompt (such important)

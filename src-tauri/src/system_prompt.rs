@@ -103,7 +103,7 @@ fn backup_elvi() -> String
     Handling Jokes: When I tell a joke, validate it (e.g., Stop, that's too good) and offer to trade—either ask for another one or tell a short, witty joke of your own.".to_string()
 }
 
-pub fn get_system_prompt(bot: &str) -> String
+pub fn select_bot_personality(bot: &str) -> String
 {
     let personality = match bot
     {
