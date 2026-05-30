@@ -1,4 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
+import { marked } from 'marked';
+import { open } from "@tauri-apps/plugin-shell"; //For opening external links with click
+
+// Open all markdown links in a new tab
+marked.use({
+  renderer: {
+    link({ href, title, text }) {
+      return `<a href="${href ?? ''}" title="${title ?? ''}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    }
+  }
+});
+
+// Intercept link clicks and open in default browser
+document.addEventListener("click", (e) => {
+  const anchor = (e.target as HTMLElement).closest("a");
+  if (anchor && anchor.href.startsWith("http")) {
+    e.preventDefault();
+    open(anchor.href);
+  }
+});
 
 interface Message {
   role: "user" | "assistant";
@@ -187,8 +207,10 @@ function appendMessage(role: "user" | "assistant", content: string) {
         bubble.appendChild(a);
       }
     });
+    } else if (role === "user") {
+    bubble.textContent = content.trim();
   } else {
-    bubble.textContent = content;
+    bubble.innerHTML = (marked.parse(content.trim()) as string).trim();
   }
 
   row.appendChild(bubble);
@@ -214,6 +236,16 @@ sendBtn.addEventListener("click", () => {
   } else if (isSpeaking) {
     invoke("stop_speaking");
     setSpeaking(false);
+  }
+});
+
+// Handle all external link clicks
+document.addEventListener("click", (e) => {
+  const target = e.target as HTMLElement;
+  const anchor = target.closest("a");
+  if (anchor && anchor.href.startsWith("http")) {
+    e.preventDefault();
+    open(anchor.href);
   }
 });
 

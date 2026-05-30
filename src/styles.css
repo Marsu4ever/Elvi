@@ -301,6 +301,24 @@ header h1 {
   font-weight: 500;
 }
 
+.message p {
+  margin: 0;
+  padding: 0;
+}
+
+.message ul, .message ol {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.message p:last-child {
+  margin-bottom: 0;
+}
+
+.message > p:first-child {
+  margin-top: 0;
+}
+
 .message-row.user .message {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #fff;
