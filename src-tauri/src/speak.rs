@@ -16,6 +16,7 @@ fn get_audio_lock() -> Arc<tokio::sync::Mutex<()>> {
     AUDIO_LOCK.get_or_init(|| Arc::new(tokio::sync::Mutex::new(()))).clone()
 }
 
+#[allow(dead_code)]
 fn mac_builtin(text: &str) -> Result<(), String> // Fallback Audio - Dev mode - unused in Production
 {
     std::process::Command::new("say")

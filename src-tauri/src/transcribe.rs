@@ -17,7 +17,7 @@ pub async fn stop_transcribe() {
 #[tauri::command]
 pub async fn transcribe() -> Result<String, String> {
     let child = std::process::Command::new("swift")
-        .arg("/Users/marsu/Documents/Coding/Ai_Assistant/src-tauri/transcribe.swift")
+        .arg("/Users/marsu/Documents/Coding/Ai_Assistant/src-tauri/transcribe.swift")// Future work: Change this for release
         .stdout(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| e.to_string())?;

@@ -17,6 +17,11 @@ use ai_tools::{get_ai_tools};
 // Cancels in-flight OpenAI chat requests
 static STOP_CHAT: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 
+// This is how we access OPEN_AI :)
+const OPENAI_API_URL: &str = "https://api.openai.com/v1/chat/completions";
+
+
+
 
 fn get_stop_chat() -> Arc<AtomicBool> {
     STOP_CHAT.get_or_init(|| Arc::new(AtomicBool::new(false))).clone()
@@ -299,7 +304,7 @@ async fn get_number_fact(client: &reqwest::Client) -> Result<String, String>
     Ok(format!("Number fact: {}", text))
 }
 
-
+///Random facts
 async fn get_random_fact(client: &reqwest::Client) -> Result<String, String>
 {
     let resp = client.get("https://uselessfacts.jsph.pl/api/v2/facts/random")  
@@ -799,26 +804,26 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
     log::info!("chat function - START'");
 
     // OpenAI API KEY
-    let api_key = std::env::var("OPENAI_API_KEY")
+    let api_key: String = std::env::var("OPENAI_API_KEY")
         .map_err(|_| "OPENAI_API_KEY environment variable not set".to_string())?;
 
     log::info!("chat - reqwest call'");
     let client = reqwest::Client::builder() // Make HTTP client (i.e. engine of browser - I like to call this Fake Browser to remind myself it acts like a browser, but no UI and stuff)
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e: reqwest::Error| e.to_string())?;
 
 
-    let system_prompt = select_bot_personality(&bot); // Get system prompt = bot personailty (f.ex. Elvi). System prompt is later sent to OpenAI.
+    let system_prompt: String = select_bot_personality(&bot); // Get system prompt = bot personailty (f.ex. Elvi). System prompt is later sent to OpenAI.
 
-    let mut all_messages = vec![
+    let mut all_messages: Vec<serde_json::Value> = vec![
         serde_json::json!({"role": "system", "content": system_prompt}) // Json (for OpenAI endpoint) - this includes the system prompt (such important)
     ];
 
     all_messages.extend(messages.iter().map(|m| serde_json::json!(m))); // Changes Message struct (i.e. conversation history) into Useful JSON (for OpenAI endpoint) - Now we talking.
 
     // OpenAI Verson
-       let body = serde_json::json!(
+    let body: serde_json::Value = serde_json::json!(
     {
         "model": "gpt-4o-mini", // gpt-4o [best balance of speed and intelligence], gpt-4o-mini [what you have now, fast and cheap], o3-mini [strong reasoning, good for complex questions], claude-sonnet-4-5 [very strong, great conversation quality], claude-haiku-3-5 [fast and cheap, similar tier to gpt-4o-mini], grok-3, grok-3-mini
         "messages": all_messages,   //Include conversation history
@@ -826,14 +831,12 @@ async fn chat(messages: Vec<Message>, bot: String) -> Result<String, String>
         "parallel_tool_calls": false
     });
 
-    // OpenAI
-    let api_url = "https://api.openai.com/v1/chat/completions";
-
     // 1st OpenAI Call — cancelled immediately if stop flag is set
     log::info!("Chat - 1st Open AI call'");
-    let response = tokio::select! {
+    let response: reqwest::Response = tokio::select!
+    {
         result = client
-            .post(api_url)
+            .post(OPENAI_API_URL)
             .header("Authorization", format!("Bearer {}", api_key))
             .json(&body)
             .send() => result.map_err(|e| e.to_string())?,
