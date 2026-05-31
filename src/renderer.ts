@@ -210,7 +210,9 @@ function appendMessage(role: "user" | "assistant", content: string) {
     } else if (role === "user") {
     bubble.textContent = content.trim();
   } else {
-    bubble.innerHTML = (marked.parse(content.trim()) as string).trim();
+    const html = (marked.parse(content.trim()) as string).trim();
+    // console.log("marked output:", html);
+    bubble.innerHTML = html;
   }
 
   row.appendChild(bubble);

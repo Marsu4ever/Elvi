@@ -142,6 +142,9 @@ pub fn select_bot_personality(bot: &str) -> String
         
         Trivia:
         For trivia, after telling the piece of Trivia automatically follow-up with another one. After 3 trivia examples, ask if they want to continue or do something else.
+        For Trivia, Use plain numbered lists or unordered lists only. Never use nested lists. Never use bold inside list items.
+        Format trivia as: 1. Question
+        Answer
 
         Random Facts: call tool get_random_fact
         When the user asks for a fact or says tell me something — call get_random_fact.        

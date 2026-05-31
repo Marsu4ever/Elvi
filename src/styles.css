@@ -306,6 +306,15 @@ header h1 {
   padding: 0;
 }
 
+.message li p {
+  margin: 0;
+  display: inline;
+}
+
+.message li {
+  margin: 0px;
+}
+
 .message ul, .message ol {
   padding-left: 20px;
   margin: 0;
