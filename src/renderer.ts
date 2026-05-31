@@ -97,6 +97,8 @@ const micBtn = document.getElementById("mic-btn")!;
 const voiceToggleBtn = document.getElementById("voice-toggle")!;
 const voiceOnIcon = document.getElementById("voice-on-icon")!;
 const voiceOffIcon = document.getElementById("voice-off-icon")!;
+const createAiEl = document.getElementById("create-ai")!;
+const createAiBackBtn = document.getElementById("create-ai-back-btn")!;
 
 // Dock magnification effect
 const botList = document.getElementById("bot-list")!;
@@ -141,6 +143,21 @@ botList.addEventListener("mousemove", (e) => {
 botList.addEventListener("mouseleave", () => {
   botOptions.forEach((_, i) => { targetScales[i] = 1; });
   if (!rafId) rafId = requestAnimationFrame(animateScales);
+});
+
+// New AI button
+document.getElementById("new-ai-btn")!.addEventListener("click", (e) => {
+  e.stopPropagation(); // prevent bot-option click handler from firing
+  landingEl.style.display = "none";
+  createAiEl.style.display = "flex";
+});
+
+// Create AI back button
+createAiBackBtn.addEventListener("click", () => {
+  createAiEl.style.display = "none";
+  landingEl.style.display = "flex";
+  landingEl.style.animation = "none";
+  requestAnimationFrame(() => { landingEl.style.animation = ""; });
 });
 
 // Back button
