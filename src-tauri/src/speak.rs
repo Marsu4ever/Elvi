@@ -143,7 +143,7 @@ pub async fn speak(text: String, bot: String) -> Result<(), String> {
     //  A. say (Mac builtin - Text to Speech - fast and free)
     //mac_builtin(&text)?; // Backup voice in case ElevenLabs fails
 
-    // C. ElevenLabs (better native voice, paid-tier)
+    // B. ElevenLabs (better native voice, paid-tier)
     eleven_labs_tts(&text, &bot).await?;
 
     Ok(())
