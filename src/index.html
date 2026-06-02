@@ -99,8 +99,14 @@
       </div>
 
       <div class="create-ai-row">
-        <label>Avatar</label>
-        <div id="ai-avatar-pick">
+        <div class="create-ai-label-stack">
+            <label>Avatar</label>
+            <div class="glow-check">
+              <label for="ai-glow-toggle">Glow</label>
+              <input type="checkbox" id="ai-glow-toggle" />
+            </div>
+          </div>
+          <div id="ai-avatar-pick">
           <img id="ai-avatar-selected" src="./avatars/elvi.svg" alt="Selected avatar" />
           <div id="ai-avatar-options">
             <img class="avatar-option" data-bot="elvi"     src="./avatars/elvi.svg"     alt="Elvi" />

@@ -161,8 +161,12 @@ document.querySelectorAll<HTMLImageElement>(".avatar-option").forEach((img) => {
   img.addEventListener("click", () => {
     selectedAvatarBot = img.dataset.bot!;
     avatarSelected.src = img.src;
-    document.querySelectorAll(".avatar-option").forEach(o => o.classList.remove("selected"));
+    document.querySelectorAll<HTMLImageElement>(".avatar-option").forEach(o => {
+      o.classList.remove("selected");
+      o.style.borderColor = "";
+    });
     img.classList.add("selected");
+    img.style.borderColor = selectedColour;
     avatarOptions.classList.remove("open");
     avatarSelected.style.display = "";
   });
@@ -170,6 +174,36 @@ document.querySelectorAll<HTMLImageElement>(".avatar-option").forEach((img) => {
 
 // Select as default Elvi theme in Create AI page
 document.querySelector<HTMLElement>('.colour-choice[data-colour="#7c6af7"]')?.classList.add("selected");
+
+let selectedColour = "#7c6af7";
+
+const glowToggle = document.getElementById("ai-glow-toggle") as HTMLInputElement;
+
+function updateAvatarGlow() {
+  const glow = glowToggle.checked ? `drop-shadow(0 0 10px ${selectedColour})` : "none";
+  avatarSelected.style.filter = glow;
+  avatarSelected.style.borderColor = selectedColour;
+  document.querySelectorAll<HTMLImageElement>(".avatar-option").forEach(img => {
+    img.style.filter = glow;
+  });
+  const selectedOption = document.querySelector<HTMLImageElement>(".avatar-option.selected");
+  if (selectedOption) selectedOption.style.borderColor = selectedColour;
+}
+
+// Apply border colour immediately on load
+avatarSelected.style.borderColor = selectedColour;
+
+glowToggle.addEventListener("change", updateAvatarGlow);
+
+document.querySelectorAll<HTMLElement>(".colour-choice").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".colour-choice").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    selectedColour = btn.dataset.colour!;
+    updateAvatarGlow();
+  });
+});
+
 
 // New AI button
 document.getElementById("new-ai-btn")!.addEventListener("click", (e) => {

@@ -564,11 +564,39 @@ header h1 {
   );
 }
 
+.create-ai-label-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 16px 20px 16px 16px;
+}
+
+.glow-check {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #dde3f0;
+  white-space: nowrap;
+}
+
+.glow-check label {
+  color: #1a46a7 !important;
+}
+
+.glow-check input {
+  margin: 0;
+}
+
+
 .create-ai-row {
   display: grid;
   grid-template-columns: 152px 1fr;
   align-items: center;
   border-bottom: 1px solid rgba(255,255,255,0.05);
+  overflow: hidden;
 }
 
 .create-ai-row:last-child {
