@@ -611,7 +611,13 @@ header h1 {
   background-color: rgba(var(--accent-rgb), 0.05);
 }
 
-#ai-avatar-pick,
+#ai-avatar-pick {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+}
+
 #ai-colour-pick {
   display: flex;
   gap: 10px;
@@ -619,22 +625,51 @@ header h1 {
   padding: 12px 20px;
 }
 
-.avatar-choice {
-  background: #1a1d2e;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 10px;
-  color: #dde3f0;
-  width: 40px;
-  height: 40px;
-  font-size: 1.1rem;
+#ai-avatar-selected {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
   cursor: pointer;
-  transition: all 0.2s;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.1);
+  padding: 4px;
+  transition: border-color 0.2s;
 }
 
-.avatar-choice:hover,
-.avatar-choice.selected {
+#ai-avatar-selected:hover {
   border-color: var(--accent);
-  color: var(--accent);
+}
+
+#ai-avatar-options {
+  display: none;
+  gap: 14px;
+  align-items: center;
+}
+
+#ai-avatar-options.open {
+  display: flex;
+}
+
+.avatar-option {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  cursor: pointer;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.1);
+  padding: 4px;
+  transition: all 0.2s;
+  opacity: 0.6;
+}
+
+.avatar-option:hover {
+  opacity: 1;
+  border-color: rgba(255,255,255,0.3);
+}
+
+.avatar-option.selected {
+  opacity: 1;
+  border-color: var(--accent);
 }
 
 .colour-choice {

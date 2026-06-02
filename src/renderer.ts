@@ -145,6 +145,32 @@ botList.addEventListener("mouseleave", () => {
   if (!rafId) rafId = requestAnimationFrame(animateScales);
 });
 
+// Avatar picker
+let selectedAvatarBot = "elvi";
+const avatarSelected = document.getElementById("ai-avatar-selected") as HTMLImageElement;
+const avatarOptions = document.getElementById("ai-avatar-options")!;
+
+avatarSelected.addEventListener("click", () => {
+  avatarSelected.style.display = "none";
+  avatarOptions.classList.add("open");
+});
+
+document.querySelectorAll<HTMLImageElement>(".avatar-option").forEach((img) => {
+  if (img.dataset.bot === selectedAvatarBot) img.classList.add("selected");
+
+  img.addEventListener("click", () => {
+    selectedAvatarBot = img.dataset.bot!;
+    avatarSelected.src = img.src;
+    document.querySelectorAll(".avatar-option").forEach(o => o.classList.remove("selected"));
+    img.classList.add("selected");
+    avatarOptions.classList.remove("open");
+    avatarSelected.style.display = "";
+  });
+});
+
+// Select as default Elvi theme in Create AI page
+document.querySelector<HTMLElement>('.colour-choice[data-colour="#7c6af7"]')?.classList.add("selected");
+
 // New AI button
 document.getElementById("new-ai-btn")!.addEventListener("click", (e) => {
   e.stopPropagation(); // prevent bot-option click handler from firing
