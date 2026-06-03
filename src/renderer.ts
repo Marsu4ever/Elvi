@@ -192,6 +192,7 @@ function updateAvatarGlow() {
 
 // Apply border colour immediately on load
 avatarSelected.style.borderColor = selectedColour;
+updateAvatarGlow(); 
 
 glowToggle.addEventListener("change", updateAvatarGlow);
 
