@@ -735,6 +735,39 @@ header h1 {
   box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.5);
 }
 
+/* Voice picker */
+#ai-voice-pick {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 14px 20px;
+}
+
+.voice-choice {
+  background: #1a1d2e;
+  color: #dde3f0;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 10px 0;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.voice-choice:hover {
+  border-color: rgba(255,255,255,0.3);
+  background: #222640;
+}
+
+.voice-choice.selected {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
 /* Thinking dots */
 .thinking-bubble {
   display: flex;

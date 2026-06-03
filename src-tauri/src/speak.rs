@@ -33,13 +33,18 @@ async fn eleven_labs_tts(text: &str, bot: &str) -> Result<(), String> {
         .map_err(|_| "ELEVENLABS_API_KEY not set".to_string())?;
 
     // 2. Selected ElevenLabs Voices
-    let voice_id = match bot 
+    let voice_id = match bot
     {
         "elvi"      => "kGOnekeZk5Zmccae0OTT",
         "alex"      => "7b1GgzhzFm98grzPUfr3",
         "samantha"  => "N3x7DJvE7NmN4ur3oV2R",
         _           => "kGOnekeZk5Zmccae0OTT", // fallback elvi
     };
+
+    eleven_labs_tts_by_id(text, voice_id, &api_key).await
+}
+
+async fn eleven_labs_tts_by_id(text: &str, voice_id: &str, api_key: &str) -> Result<(), String> {
     // American Assistan - natural, upbeat, conversational female voice. Swap voice_id for a different voice.
     // let voice_id = "kGOnekeZk5Zmccae0OTT"; // 1st voice - YES!
 
@@ -84,7 +89,7 @@ async fn eleven_labs_tts(text: &str, bot: &str) -> Result<(), String> {
     // 5. Sends request to ElevenLabs Api
     let response = client
         .post(format!("https://api.elevenlabs.io/v1/text-to-speech/{}", voice_id))
-        .header("xi-api-key", &api_key)
+        .header("xi-api-key", api_key)
         .json(&body)
         .send()
         .await
@@ -153,4 +158,18 @@ pub async fn speak(text: String, bot: String) -> Result<(), String> {
 pub fn stop_speaking() {
     get_stop_audio().store(true, Ordering::Relaxed);
     get_stop_chat().store(true, Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub async fn preview_voice(voice_id: String) -> Result<(), String> {
+    let api_key = std::env::var("ELEVENLABS_API_KEY")
+        .map_err(|_| "ELEVENLABS_API_KEY not set".to_string())?;
+
+    get_stop_audio().store(true, Ordering::Relaxed);
+    let audio_lock = get_audio_lock();
+    let _guard = audio_lock.lock().await;
+    get_stop_audio().store(false, Ordering::Relaxed);
+
+    let sample = "Hey, this is what I sound like. Hope you like it!";
+    eleven_labs_tts_by_id(sample, &voice_id, &api_key).await
 }

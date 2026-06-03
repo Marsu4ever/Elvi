@@ -6,7 +6,7 @@ mod transcribe;
 use transcribe::{transcribe, stop_transcribe};
 
 mod speak;
-use speak::{speak, stop_speaking};
+use speak::{speak, stop_speaking, preview_voice};
 
 mod system_prompt;
 use system_prompt::{select_bot_personality};
@@ -957,7 +957,7 @@ pub fn run() {
             }
             Ok(())                              // return success from the closure
         })
-        .invoke_handler(tauri::generate_handler![chat, transcribe, stop_transcribe, speak, stop_speaking])// register commands (f.ex. chat)
+        .invoke_handler(tauri::generate_handler![chat, transcribe, stop_transcribe, speak, stop_speaking, preview_voice])// register commands (f.ex. chat)
         .run(tauri::generate_context!())        // start the app (reads tauri.conf.json)
         .expect("error while running tauri application");   // crash with message if it fails
 }

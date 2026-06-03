@@ -206,6 +206,23 @@ document.querySelectorAll<HTMLElement>(".colour-choice").forEach((btn) => {
 });
 
 
+// Voice picker
+let selectedVoiceId = "";
+
+document.querySelectorAll<HTMLElement>(".voice-choice").forEach((btn) => {
+  // Single click — preview
+  btn.addEventListener("click", () => {
+    invoke("preview_voice", { voiceId: btn.dataset.voiceId });
+  });
+
+  // Double click — select
+  btn.addEventListener("dblclick", () => {
+    document.querySelectorAll(".voice-choice").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    selectedVoiceId = btn.dataset.voiceId!;
+  });
+});
+
 // New AI button
 document.getElementById("new-ai-btn")!.addEventListener("click", (e) => {
   e.stopPropagation(); // prevent bot-option click handler from firing
